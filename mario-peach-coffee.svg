@@ -1,0 +1,229 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" width="800" height="600" role="img" aria-labelledby="t d">
+  <title id="t">Mario and Peach sharing coffee</title>
+  <desc id="d">A cartoon café scene: Mario in his red cap and blue overalls sips coffee while Princess Peach holds a cup across the table.</desc>
+
+  <defs>
+    <style>
+      .o { stroke:#3a2416; stroke-width:3; stroke-linejoin:round; stroke-linecap:round; }
+      .ol { stroke:#3a2416; stroke-width:2; stroke-linejoin:round; stroke-linecap:round; }
+    </style>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7ec8f5"/>
+      <stop offset="1" stop-color="#d8f0ff"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#fff2b0" stop-opacity="0.9"/>
+      <stop offset="1" stop-color="#fff2b0" stop-opacity="0"/>
+    </radialGradient>
+    <path id="heart" d="M0 6 C-12 -5 -16 -15 -7 -18 C-3 -19 0 -15 0 -13 C0 -15 3 -19 7 -18 C16 -15 12 -5 0 6Z"/>
+  </defs>
+
+  <!-- ===== Café background ===== -->
+  <rect width="800" height="600" fill="#f7e4c6"/>
+  <g opacity="0.35" stroke="#e8c99a" stroke-width="10">
+    <path d="M40 0V380M120 0V380M200 0V380M280 0V380M360 0V380M440 0V380M520 0V380M600 0V380M680 0V380M760 0V380"/>
+  </g>
+  <!-- wainscot -->
+  <rect y="375" width="800" height="120" fill="#e0b184"/>
+  <rect y="370" width="800" height="12" fill="#c98f5f" class="ol"/>
+  <!-- floor -->
+  <rect y="490" width="800" height="110" fill="#b5794a"/>
+  <g stroke="#9a643b" stroke-width="3" opacity="0.8">
+    <path d="M0 520H800M0 555H800M0 590H800"/>
+    <path d="M120 490V520M300 520V555M520 490V520M700 520V555M210 555V590M450 555V590M640 555V590"/>
+  </g>
+
+  <!-- window -->
+  <g>
+    <rect x="325" y="30" width="150" height="135" rx="6" fill="url(#sky)" class="o"/>
+    <ellipse cx="370" cy="70" rx="24" ry="10" fill="#fff"/>
+    <ellipse cx="392" cy="62" rx="18" ry="10" fill="#fff"/>
+    <ellipse cx="440" cy="108" rx="22" ry="9" fill="#fff"/>
+    <path d="M400 30V165M325 97H475" class="o" fill="none"/>
+    <rect x="315" y="162" width="170" height="12" rx="4" fill="#c98f5f" class="o"/>
+  </g>
+
+  <!-- chalkboard sign -->
+  <g>
+    <line x1="110" y1="0" x2="110" y2="55" class="ol"/>
+    <line x1="190" y1="0" x2="190" y2="55" class="ol"/>
+    <rect x="70" y="55" width="160" height="70" rx="6" fill="#2f4a3a" stroke="#8a5a34" stroke-width="7" stroke-linejoin="round"/>
+    <text x="150" y="99" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="30" font-weight="700" fill="#fdf6e3" letter-spacing="3">CAFÉ</text>
+    <path d="M110 110H190" stroke="#fdf6e3" stroke-width="2" stroke-dasharray="4 4" opacity="0.7"/>
+  </g>
+
+  <!-- pendant lamp -->
+  <g>
+    <circle cx="690" cy="150" r="70" fill="url(#glow)"/>
+    <line x1="690" y1="0" x2="690" y2="95" class="ol"/>
+    <path d="M660 128 Q660 92 690 92 Q720 92 720 128Z" fill="#e8574a" class="o"/>
+    <ellipse cx="690" cy="130" rx="14" ry="6" fill="#ffe680" class="ol"/>
+  </g>
+
+  <!-- ===== Mario ===== -->
+  <g>
+    <!-- left arm (hangs behind table) -->
+    <line x1="205" y1="345" x2="196" y2="430" stroke="#3a2416" stroke-width="34" stroke-linecap="round"/>
+    <line x1="205" y1="345" x2="196" y2="430" stroke="#e52521" stroke-width="28" stroke-linecap="round"/>
+    <!-- shirt torso -->
+    <path d="M195 448 V352 Q195 320 228 316 H272 Q305 320 305 352 V448Z" fill="#e52521" class="o"/>
+    <!-- overalls -->
+    <rect x="207" y="376" width="86" height="72" fill="#2a56d1" class="o"/>
+    <rect x="224" y="350" width="52" height="34" rx="6" fill="#2a56d1" class="o"/>
+    <line x1="232" y1="352" x2="218" y2="324" stroke="#3a2416" stroke-width="18" stroke-linecap="round"/>
+    <line x1="232" y1="352" x2="218" y2="324" stroke="#2a56d1" stroke-width="12" stroke-linecap="round"/>
+    <line x1="268" y1="352" x2="282" y2="324" stroke="#3a2416" stroke-width="18" stroke-linecap="round"/>
+    <line x1="268" y1="352" x2="282" y2="324" stroke="#2a56d1" stroke-width="12" stroke-linecap="round"/>
+    <circle cx="232" cy="364" r="6" fill="#ffd21f" class="ol"/>
+    <circle cx="268" cy="364" r="6" fill="#ffd21f" class="ol"/>
+    <!-- neck -->
+    <rect x="234" y="296" width="32" height="34" fill="#f7c59a" class="o"/>
+    <!-- ears + hair -->
+    <circle cx="184" cy="256" r="14" fill="#f7c59a" class="o"/>
+    <circle cx="316" cy="256" r="14" fill="#f7c59a" class="o"/>
+    <ellipse cx="195" cy="272" rx="13" ry="26" fill="#5b3212" class="o"/>
+    <ellipse cx="305" cy="272" rx="13" ry="26" fill="#5b3212" class="o"/>
+    <!-- head -->
+    <circle cx="250" cy="245" r="68" fill="#f7c59a" class="o"/>
+    <!-- eyes -->
+    <ellipse cx="226" cy="264" rx="10" ry="13" fill="#fff" class="ol"/>
+    <ellipse cx="274" cy="264" rx="10" ry="13" fill="#fff" class="ol"/>
+    <circle cx="229" cy="266" r="6" fill="#3d78e0"/>
+    <circle cx="277" cy="266" r="6" fill="#3d78e0"/>
+    <circle cx="229" cy="266" r="3" fill="#111"/>
+    <circle cx="277" cy="266" r="3" fill="#111"/>
+    <circle cx="227" cy="262" r="1.8" fill="#fff"/>
+    <circle cx="275" cy="262" r="1.8" fill="#fff"/>
+    <!-- nose -->
+    <ellipse cx="250" cy="286" rx="17" ry="13" fill="#f0a97a" class="o"/>
+    <!-- mustache -->
+    <path d="M250 297 Q224 290 205 305 Q221 322 250 309 Q279 322 295 305 Q276 290 250 297Z" fill="#4a2a10" class="o"/>
+    <!-- cap -->
+    <path d="M180 240 Q174 158 250 158 Q326 158 320 240 Q250 208 180 240Z" fill="#e52521" class="o"/>
+    <path d="M186 236 Q250 202 314 236 Q322 256 250 250 Q178 256 186 236Z" fill="#c81d1a" class="o"/>
+    <circle cx="250" cy="194" r="20" fill="#fff" class="o"/>
+    <path d="M240 204V185L250 196L260 185V204" fill="none" stroke="#e52521" stroke-width="5" stroke-linejoin="round" stroke-linecap="round"/>
+
+    <!-- saucer on the table -->
+    <!-- (drawn after table below) -->
+
+    <!-- right arm raised to cup -->
+    <line x1="298" y1="346" x2="344" y2="322" stroke="#3a2416" stroke-width="34" stroke-linecap="round"/>
+    <line x1="298" y1="346" x2="344" y2="322" stroke="#e52521" stroke-width="28" stroke-linecap="round"/>
+    <!-- cup tilted to the lips -->
+    <g transform="translate(332,300) rotate(-30)">
+      <path d="M26 -10 Q48 -10 44 8 Q40 24 22 20" fill="none" stroke="#3a2416" stroke-width="8" stroke-linecap="round"/>
+      <path d="M26 -10 Q48 -10 44 8 Q40 24 22 20" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round"/>
+      <path d="M-26 -22H26L20 30Q0 38 -20 30Z" fill="#fff" class="o"/>
+      <path d="M-24.5 -6H24.5L22.5 6H-22.5Z" fill="#e52521"/>
+      <ellipse cx="0" cy="-22" rx="26" ry="7" fill="#6b3e1f" class="o"/>
+      <ellipse cx="-4" cy="-23" rx="10" ry="2.5" fill="#a5703f" opacity="0.8"/>
+    </g>
+    <!-- glove -->
+    <circle cx="350" cy="316" r="16" fill="#fff" class="o"/>
+    <path d="M340 312Q350 322 360 312" fill="none" class="ol" opacity="0.5"/>
+    <!-- steam -->
+    <g fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" opacity="0.9">
+      <path d="M338 262 Q328 250 338 240 Q346 230 338 220"/>
+      <path d="M356 268 Q348 258 356 250 Q362 242 356 234"/>
+    </g>
+  </g>
+
+  <!-- ===== Peach ===== -->
+  <g>
+    <!-- hair back -->
+    <path d="M466 252 Q462 143 560 143 Q658 143 654 252 Q668 345 642 425 L478 425 Q452 345 466 252Z" fill="#f7cf3a" class="o"/>
+    <path d="M490 300 Q484 360 494 410M630 300 Q636 360 626 410" fill="none" stroke="#e0b520" stroke-width="3" stroke-linecap="round"/>
+    <!-- neck -->
+    <rect x="546" y="290" width="28" height="42" fill="#fbd5b5" class="o"/>
+    <!-- dress -->
+    <path d="M488 448 V374 Q492 330 560 322 Q628 330 632 374 V448Z" fill="#ff8fc0" class="o"/>
+    <path d="M530 326 Q560 354 590 326 Q560 318 530 326Z" fill="#fbd5b5" class="o"/>
+    <path d="M500 400 Q560 418 620 400" fill="none" stroke="#ff6fac" stroke-width="3" opacity="0.6"/>
+    <!-- puffy sleeves -->
+    <circle cx="490" cy="358" r="26" fill="#ff8fc0" class="o"/>
+    <circle cx="630" cy="358" r="26" fill="#ff8fc0" class="o"/>
+    <!-- brooch -->
+    <circle cx="560" cy="348" r="10" fill="#3b8fe6" stroke="#f6c31c" stroke-width="4"/>
+    <circle cx="557" cy="345" r="2.5" fill="#fff" opacity="0.8"/>
+    <!-- head -->
+    <circle cx="560" cy="245" r="58" fill="#fbd5b5" class="o"/>
+    <!-- side locks -->
+    <path d="M503 240 Q494 292 508 326 Q520 292 516 250Z" fill="#f7cf3a" class="o"/>
+    <path d="M617 240 Q626 292 612 326 Q600 292 604 250Z" fill="#f7cf3a" class="o"/>
+    <!-- earrings -->
+    <circle cx="503" cy="268" r="6" fill="#3b8fe6" stroke="#f6c31c" stroke-width="2.5"/>
+    <circle cx="617" cy="268" r="6" fill="#3b8fe6" stroke="#f6c31c" stroke-width="2.5"/>
+    <!-- bangs -->
+    <path d="M500 242 Q504 172 560 166 Q616 172 620 242 Q604 202 572 196 Q562 216 540 220 Q514 224 500 242Z" fill="#f7cf3a" class="o"/>
+    <!-- crown -->
+    <path d="M526 180 L530 138 L546 158 L560 128 L574 158 L590 138 L594 180Z" fill="#f6c31c" class="o"/>
+    <rect x="526" y="170" width="68" height="14" rx="4" fill="#f6c31c" class="o"/>
+    <circle cx="560" cy="177" r="5" fill="#3b8fe6" class="ol"/>
+    <circle cx="542" cy="177" r="3.5" fill="#e8384f"/>
+    <circle cx="578" cy="177" r="3.5" fill="#e8384f"/>
+    <!-- eyes (looking at Mario) -->
+    <ellipse cx="540" cy="254" rx="8.5" ry="11" fill="#5cb6f2" class="ol"/>
+    <ellipse cx="580" cy="254" rx="8.5" ry="11" fill="#5cb6f2" class="ol"/>
+    <ellipse cx="538" cy="255" rx="4.5" ry="7" fill="#1c3a66"/>
+    <ellipse cx="578" cy="255" rx="4.5" ry="7" fill="#1c3a66"/>
+    <circle cx="536" cy="250" r="2.6" fill="#fff"/>
+    <circle cx="576" cy="250" r="2.6" fill="#fff"/>
+    <path d="M530 248 Q539 238 549 245 M530 248 L525 243" fill="none" stroke="#3a2416" stroke-width="3" stroke-linecap="round"/>
+    <path d="M571 245 Q581 238 590 248 M590 248 L595 243" fill="none" stroke="#3a2416" stroke-width="3" stroke-linecap="round"/>
+    <path d="M530 234 Q540 228 549 233M571 233 Q580 228 590 234" fill="none" stroke="#b8862a" stroke-width="2.5" stroke-linecap="round"/>
+    <!-- blush, nose, mouth -->
+    <ellipse cx="523" cy="276" rx="9" ry="5" fill="#ff8fa3" opacity="0.55"/>
+    <ellipse cx="597" cy="276" rx="9" ry="5" fill="#ff8fa3" opacity="0.55"/>
+    <path d="M558 270 Q561 274 564 270" fill="none" stroke="#d99a78" stroke-width="2" stroke-linecap="round"/>
+    <path d="M549 283 Q560 296 571 283 Q560 288 549 283Z" fill="#e8456c" class="ol"/>
+
+    <!-- forearms in opera gloves -->
+    <path d="M498 376 L532 400" stroke="#3a2416" stroke-width="24" stroke-linecap="round"/>
+    <path d="M498 376 L532 400" stroke="#fff" stroke-width="18" stroke-linecap="round"/>
+    <path d="M622 376 L588 400" stroke="#3a2416" stroke-width="24" stroke-linecap="round"/>
+    <path d="M622 376 L588 400" stroke="#fff" stroke-width="18" stroke-linecap="round"/>
+    <!-- cup -->
+    <g transform="translate(560,402)">
+      <path d="M-24 -20H24L18 26Q0 34 -18 26Z" fill="#fff" class="o"/>
+      <ellipse cx="0" cy="-20" rx="24" ry="6.5" fill="#7a4a26" class="o"/>
+      <path d="M0 -17 C-6 -21 -8 -25 -4 -25.5 C-2 -25.5 0 -23 0 -22.5 C0 -23 2 -25.5 4 -25.5 C8 -25 6 -21 0 -17Z" fill="#f2dcc0" transform="translate(0,3)"/>
+      <use href="#heart" x="0" y="8" transform="translate(0,4) scale(0.8)" fill="#ff8fc0"/>
+    </g>
+    <!-- gloves gripping the cup -->
+    <circle cx="534" cy="402" r="13" fill="#fff" class="o"/>
+    <circle cx="586" cy="402" r="13" fill="#fff" class="o"/>
+    <!-- steam -->
+    <g fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" opacity="0.9">
+      <path d="M542 372 Q534 360 542 352 Q548 344 542 334"/>
+      <path d="M578 372 Q570 360 578 352 Q584 344 578 334"/>
+    </g>
+  </g>
+
+  <!-- ===== Table ===== -->
+  <ellipse cx="400" cy="552" rx="80" ry="13" fill="#5f3d22" class="o"/>
+  <path d="M388 466 H412 L418 545 H382Z" fill="#7b4f2c" class="o"/>
+  <rect x="100" y="440" width="600" height="28" rx="14" fill="#a06a3d" class="o"/>
+  <rect x="120" y="446" width="560" height="5" rx="2.5" fill="#c48a58" opacity="0.8"/>
+
+  <!-- saucers + treats on table -->
+  <ellipse cx="290" cy="440" rx="38" ry="8" fill="#fff" class="o"/>
+  <ellipse cx="290" cy="438" rx="18" ry="3.5" fill="#e8e8e8"/>
+  <path d="M312 434 L344 428" stroke="#b8b8b8" stroke-width="3" stroke-linecap="round"/>
+  <ellipse cx="560" cy="441" rx="38" ry="8" fill="#fff" class="o"/>
+  <!-- croissant on plate -->
+  <ellipse cx="410" cy="440" rx="46" ry="8" fill="#fff" class="o"/>
+  <path d="M380 436 Q384 414 410 412 Q436 414 440 436 Q425 428 410 428 Q395 428 380 436Z" fill="#dc9440" class="o"/>
+  <path d="M396 415 Q394 424 396 430M410 412 V428M424 415 Q426 424 424 430" fill="none" stroke="#a9651f" stroke-width="2.5" stroke-linecap="round"/>
+
+  <!-- hearts between them -->
+  <use href="#heart" fill="#ff5c93" opacity="0.9" transform="translate(408,300) scale(1.1)" class="ol"/>
+  <use href="#heart" fill="#ff8fc0" opacity="0.85" transform="translate(438,262) scale(0.8)" class="ol"/>
+  <use href="#heart" fill="#ffb3d1" opacity="0.85" transform="translate(386,252) scale(0.6)" class="ol"/>
+
+  <!-- sparkles -->
+  <g fill="#fff6b8" stroke="#e8c33a" stroke-width="1.5" stroke-linejoin="round">
+    <path d="M450 320 l3 8 8 3 -8 3 -3 8 -3 -8 -8 -3 8 -3z"/>
+    <path d="M372 336 l2 6 6 2 -6 2 -2 6 -2 -6 -6 -2 6 -2z"/>
+  </g>
+</svg>
