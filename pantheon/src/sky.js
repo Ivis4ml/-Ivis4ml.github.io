@@ -66,7 +66,7 @@ export class SkySystem {
     this.envSky = new THREE.Mesh(sky.geometry, sky.material); this.envSky.scale.setScalar(450000); this.envScene.add(this.envSky);
     const gnd = new THREE.Mesh(new THREE.SphereGeometry(5000, 24, 8, 0, TAU, Math.PI / 2, Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x4a4236, side: THREE.BackSide }));
     this.envScene.add(gnd); this.envGround = gnd;
-    this.envRT = null; this.envBoost = 0.42;
+    this.envRT = null; this.envBoost = 0.34;
 
     scene.fog = new THREE.FogExp2(0xbfd0e6, 0.00055);
   }
@@ -124,7 +124,7 @@ export class SkySystem {
         void main(){ vC=color; vec4 mv=modelViewMatrix*vec4(position,1.0); gl_PointSize=size*uScale; gl_Position=projectionMatrix*mv; }`,
       fragmentShader: `varying vec3 vC; uniform float uNight;
         void main(){ vec2 d=gl_PointCoord-0.5; float r=length(d); float a=smoothstep(0.5,0.0,r); gl_FragColor=vec4(vC*a*uNight*2.2, a*uNight); }`,
-      transparent: true, depthWrite: false, depthTest: false, blending: THREE.AdditiveBlending,
+      transparent: true, depthWrite: false, depthTest: true, blending: THREE.AdditiveBlending,
     });
     const pts = new THREE.Points(g, m); pts.renderOrder = -9; pts.frustumCulled = false;
     const grp = new THREE.Group(); grp.add(pts); grp.userData.mat = m; grp.renderOrder = -9;
@@ -142,7 +142,7 @@ export class SkySystem {
     gr.addColorStop(0, 'rgba(210,225,255,0.35)'); gr.addColorStop(1, 'rgba(210,225,255,0)');
     g.fillStyle = gr; g.fillRect(0, 0, S, S);
     const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
-    const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, depthTest: false, fog: false, toneMapped: false, color: 0xffffff });
+    const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, depthTest: true, fog: false, toneMapped: false, color: 0xffffff });
     const sp = new THREE.Sprite(mat); sp.scale.setScalar(150); sp.renderOrder = -8; return sp;
   }
 
@@ -166,13 +166,13 @@ export class SkySystem {
     const wx = { clear: [0.28, 0.4], cloudy: [0.55, 0.6], overcast: [0.92, 0.9] }[weather] || [0.3, 0.4];
     u.cloudCoverage.value = wx[0]; u.cloudDensity.value = wx[1];
     u.sunPosition.value.copy(this.sunDir).multiplyScalar(400000);
-    u.turbidity.value = weather === 'overcast' ? 9 : 3.4; u.rayleigh.value = lerp(1.35, 0.9, twilight);
+    u.turbidity.value = weather === 'overcast' ? 9 : 4.2; u.rayleigh.value = lerp(0.95, 0.7, twilight);
     const overcast = weather === 'overcast' ? 0.55 : weather === 'cloudy' ? 0.15 : 0;
 
     // key light
     const sunWarm = mix3(WARM, WHITE, smoothstep(0.02, 0.5, s));
     const sunI = 5.2 * smoothstep(-0.01, 0.12, s) * (1 - overcast);
-    const moonI = 0.55 * moonUp * night;
+    const moonI = 0.85 * moonUp * night;
     this.sunI = sunI; this.moonI = moonI; this.state.overcast = overcast;
     if (sunI > 0.01 || moonI < 0.01) {
       this.key.position.copy(this.sunDir).multiplyScalar(300).add(this.key.target.position);
@@ -181,10 +181,10 @@ export class SkySystem {
       this.key.position.copy(this.moonDir).multiplyScalar(300).add(this.key.target.position);
       this.key.color.setRGB(0.62, 0.72, 1.0); this.key.intensity = moonI;
     }
-    this.hemi.intensity = lerp(0.03, 0.12, daylight) * (1 + overcast);
-    const skyC = mix3([0.02, 0.03, 0.07], [0.62, 0.74, 0.95], daylight);
+    this.hemi.intensity = lerp(0.55, 0.34, daylight) * (1 + overcast * 0.6);
+    const skyC = mix3([0.15, 0.14, 0.17], [0.82, 0.86, 0.95], daylight);
     this.hemi.color.setRGB(skyC[0], skyC[1], skyC[2]);
-    const grC = mix3([0.015, 0.014, 0.012], [0.45, 0.4, 0.33], daylight);
+    const grC = mix3([0.16, 0.11, 0.07], [0.62, 0.5, 0.36], daylight);
     this.hemi.groundColor.setRGB(grC[0], grC[1], grC[2]);
 
     // fog
@@ -201,7 +201,7 @@ export class SkySystem {
     this.moon.visible = this.moon.material.opacity > 0.01;
 
     // env tint (ground bounce brightness)
-    const g = mix3([0.01, 0.01, 0.012], [0.42, 0.38, 0.31], daylight);
+    const g = mix3([0.01, 0.01, 0.012], [0.62, 0.52, 0.4], daylight);
     this.envGround.material.color.setRGB(g[0], g[1], g[2]);
   }
 

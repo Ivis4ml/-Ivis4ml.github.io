@@ -2,35 +2,16 @@
 // palazzi (BSP street plan), café umbrellas, distant landmarks and the hills of the horizon.
 import * as THREE from 'three';
 import * as T from './textures.js';
+import { buildCity } from './city.js';
 import { merge, boxUV, shaftGeometry } from './geo.js';
+import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
+import { applyDetail } from './detail.js';
 import { mulberry32, TAU, DEG, clamp, lerp, makeCanvas, fbm } from './util.js';
 
 const smoothstep01 = (x) => { const t = Math.min(1, Math.max(0, x)); return t * t * (3 - 2 * t); };
-export const PIAZZA = { x0: -37, x1: 37, z0: -118, z1: -46.5 };
+export const PIAZZA = { x0: -29, x1: 29, z0: -115, z1: -46.5 };
 export const FOUNTAIN = { x: 0, z: -67.5 };
 const GROUND = -0.6;
-
-// ------------------------------------------------------------------------------------------------
-// Facade material: vertex-tinted plaster + procedural lit windows at night (hash per window cell).
-// ------------------------------------------------------------------------------------------------
-function facadeMaterial(tex, nightU, litFrac) {
-  const m = new THREE.MeshStandardMaterial({ map: tex.map, vertexColors: true, roughness: 0.93, metalness: 0 });
-  m.onBeforeCompile = (sh) => {
-    sh.uniforms.uNight = nightU; sh.uniforms.tWin = { value: tex.emissive };
-    sh.vertexShader = sh.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute float aSeed;\nvarying float vSeed;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvSeed = aSeed;');
-    sh.fragmentShader = sh.fragmentShader
-      .replace('#include <common>', `#include <common>
-        uniform float uNight; uniform sampler2D tWin; varying float vSeed;
-        float h12(vec2 p){ vec3 p3 = fract(vec3(p.xyx) * .1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }`)
-      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
-        { vec2 cell = floor(vMapUv); float r = h12(cell + vSeed * 17.0); float lit = step(r, ${litFrac.toFixed(2)});
-          float flick = 0.7 + 0.5 * h12(cell * 3.1 + vSeed);
-          totalEmissiveRadiance += texture2D(tWin, vMapUv).rgb * lit * uNight * flick * vec3(1.0, 0.62, 0.3) * 0.95; }`);
-  };
-  return m;
-}
 
 // ------------------------------------------------------------------------------------------------
 export function buildWorld({ hq = true } = {}) {
@@ -42,7 +23,7 @@ export function buildWorld({ hq = true } = {}) {
   // ---------------------------------------------------------------- ground (sampietrini)
   const cob = T.cobbleTextures();
   const macro = T.noiseTexture(256, 7, 6);
-  const groundMat = new THREE.MeshStandardMaterial({ map: cob.map, bumpMap: cob.bump, bumpScale: 2.2, roughness: 0.82, color: 0xffeedd });
+  const groundMat = new THREE.MeshStandardMaterial({ map: cob.map, normalMap: cob.normal, roughnessMap: cob.rough, roughness: 1, color: 0xffffff });
   groundMat.onBeforeCompile = (sh) => {
     sh.uniforms.tMacro = { value: macro };
     sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vWP;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvWP = (modelMatrix * vec4(position,1.0)).xyz;');
@@ -60,9 +41,9 @@ export function buildWorld({ hq = true } = {}) {
 
   // ---------------------------------------------------------------- Fountain of the Pantheon + Macuteo obelisk
   const fountain = new THREE.Group(); fountain.position.set(FOUNTAIN.x, GROUND, FOUNTAIN.z); group.add(fountain);
-  const portasanta = T.stoneTextures({ base: [196, 168, 140], dark: [140, 100, 84], blockW: 1.6, blockH: 0.8, tile: [3.2, 1.6], seed: 33, stains: 0.2 });
-  const marbleMat = new THREE.MeshStandardMaterial({ map: portasanta.map, bumpMap: portasanta.bump, bumpScale: 0.6, roughness: 0.45 });
-  const whiteMat = new THREE.MeshStandardMaterial({ map: T.marbleTexture('white'), roughness: 0.4 });
+  const portasanta = T.stoneTextures({ base: [196, 168, 140], dark: [140, 100, 84], blockW: 1.6, blockH: 0.8, tile: [3.2, 1.6], seed: 33, stains: 0.2, pores: false });
+  const marbleMat = new THREE.MeshStandardMaterial({ map: portasanta.map, normalMap: portasanta.normal, roughnessMap: portasanta.rough, roughness: 1 });
+  const whiteMt = T.marbleTextures('white'); const whiteMat = new THREE.MeshStandardMaterial({ map: whiteMt.map, normalMap: whiteMt.normal, roughnessMap: whiteMt.rough, roughness: 1 });
   const octa = (r0, r1, h, y, mat) => { const g = new THREE.CylinderGeometry(r1, r0, h, 8, 1); g.rotateY(Math.PI / 8); const m = new THREE.Mesh(g, mat); m.position.y = y + h / 2; m.castShadow = m.receiveShadow = true; fountain.add(m); return m; };
   octa(5.6, 5.4, 0.18, 0, marbleMat); octa(4.9, 4.7, 0.18, 0.18, marbleMat);       // two steps
   // basin wall: ring (outer octagon minus inner octagon) via lathe-like extrude shape
@@ -86,21 +67,22 @@ export function buildWorld({ hq = true } = {}) {
   }
   // rock pedestal with four dolphins (stylised), plinth, obelisk
   {
-    const rockMat = new THREE.MeshStandardMaterial({ map: T.marbleTexture('white'), color: 0xd9ccb8, roughness: 0.7 });
-    const rock = new THREE.IcosahedronGeometry(1.7, 3); const p = rock.attributes.position;
+    const rockMat = applyDetail(new THREE.MeshStandardMaterial({ color: 0xc9bda6, roughness: 0.95 }), { s1: 1.6, s2: 14, albedo: 0.2, bump: 1.6, rough: 0.1 });
+    let rock = mergeVertices(new THREE.IcosahedronGeometry(1.7, 5)); const p = rock.attributes.position;
     for (let i = 0; i < p.count; i++) {
       const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
-      const n = 0.82 + 0.35 * fbm((x + 3) * 0.17, (z + 3) * 0.17 + y * 0.09, 4, 3, 5);
-      p.setXYZ(i, x * n * 1.1, (y > 0 ? y * 1.45 : y * 0.3) * n, z * n * 1.1);
+      const n = 0.8 + 0.42 * fbm((x + 3) * 0.19, (z + 3) * 0.19 + y * 0.11, 4, 4, 5) + 0.12 * Math.sin(y * 3.1 + x);
+      const up = y > 0 ? 1.55 : 0.55; const flare = 1.25 + Math.max(0, -y) * 0.35;
+      p.setXYZ(i, x * n * flare, y * up * n, z * n * flare);
     }
     rock.computeVertexNormals();
-    const r = new THREE.Mesh(rock, rockMat); r.position.y = 1.7; r.castShadow = r.receiveShadow = true; fountain.add(r);
+    const r = new THREE.Mesh(rock, rockMat); r.position.y = 1.55; r.castShadow = r.receiveShadow = true; fountain.add(r);
     const plinth = new THREE.Mesh(boxUV(1.7, 0.6, 1.7, 1.2), whiteMat); plinth.position.y = 3.95; plinth.castShadow = true; fountain.add(plinth);
-    for (let i = 0; i < 4; i++) { // dolphins: curved tubes with a head knob
+    // four carved spouts at the corners of the pedestal (the water falls from here into the basin)
+    for (let i = 0; i < 4; i++) {
       const a = i * Math.PI / 2 + Math.PI / 4;
-      const curve = new THREE.CatmullRomCurve3([new THREE.Vector3(Math.cos(a) * 2.5, 1.3, Math.sin(a) * 2.5), new THREE.Vector3(Math.cos(a) * 2.2, 2.0, Math.sin(a) * 2.2), new THREE.Vector3(Math.cos(a) * 1.5, 2.9, Math.sin(a) * 1.5), new THREE.Vector3(Math.cos(a) * 1.0, 3.9, Math.sin(a) * 1.0)]);
-      const tube = new THREE.Mesh(new THREE.TubeGeometry(curve, 16, 0.2, 8), whiteMat); tube.castShadow = true; fountain.add(tube);
-      const head = new THREE.Mesh(new THREE.SphereGeometry(0.28, 12, 8), whiteMat); head.position.set(Math.cos(a) * 2.5, 1.2, Math.sin(a) * 2.5); head.scale.set(1, 0.9, 1.3); head.lookAt(0, 1.2, 0); fountain.add(head);
+      const spout = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.42, 0.5), whiteMat); spout.position.set(Math.cos(a) * 1.55, 1.55, Math.sin(a) * 1.55); spout.rotation.y = -a; spout.castShadow = true; fountain.add(spout);
+      const lip = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.3, 10).rotateZ(Math.PI / 2), whiteMat); lip.position.set(Math.cos(a) * 1.85, 1.5, Math.sin(a) * 1.85); lip.rotation.y = -a; fountain.add(lip);
     }
     // obelisk: 6.34 m, red granite, hieroglyph band texture
     const oc = makeCanvas(128, 512), og = oc.getContext('2d'); const orr = mulberry32(77);
@@ -117,158 +99,20 @@ export function buildWorld({ hq = true } = {}) {
   }
   group.userData.fountain = fountain;
 
-  // ---------------------------------------------------------------- the city
-  const upper = T.facadeTextures('upper'), lower = T.facadeTextures('ground'), roofT = T.roofTexture();
-  const matUpper = facadeMaterial(upper, nightU, 0.3), matLower = facadeMaterial(lower, nightU, 0.45);
-  const roofMat = new THREE.MeshStandardMaterial({ map: roofT, vertexColors: true, roughness: 0.85, side: THREE.DoubleSide });
-  const lin = (hex) => { const c = new THREE.Color(hex); return [c.r, c.g, c.b]; };
-  const plaster = ['#d9a566', '#d98f63', '#dcb97f', '#cc8058', '#e2c590', '#c48c5c', '#e6bf78', '#d0986c', '#c9774f', '#e0b48a'].map(lin);
-  const roofCols = ['#ffffff', '#f4e6d8', '#e8d2bc', '#ffe9d6', '#d9c2ac'].map(lin);
-
-  // buffers: near (shadow caster) and far
-  const mk = () => ({ up: { p: [], n: [], uv: [], c: [], s: [] }, lo: { p: [], n: [], uv: [], c: [], s: [] }, rf: { p: [], n: [], uv: [], c: [], s: [] }, prop: [] });
-  const near = mk(), far = mk();
-
-  const quad = (B, a, b, c, d, n, uvs, col, seed) => {
-    for (const [i, j, k] of [[0, 1, 2], [0, 2, 3]]) {
-      const P = [a, b, c, d];
-      for (const t of [i, j, k]) { B.p.push(...P[t]); B.n.push(...n); B.uv.push(...uvs[t]); B.c.push(...col); B.s.push(seed); }
-    }
-  };
-  const addBuilding = (L, cx, cz, w, d, rot, h, rr) => {
-    const B = L;
-    const col = plaster[(rr() * plaster.length) | 0].map((v) => v * (0.82 + rr() * 0.3));
-    const seed = rr() * 100;
-    const cs = Math.cos(rot), sn = Math.sin(rot);
-    const pts = [[-w / 2, -d / 2], [w / 2, -d / 2], [w / 2, d / 2], [-w / 2, d / 2]].map(([x, z]) => [cx + x * cs - z * sn, cz + x * sn + z * cs]);
-    const gh = 4.8, floors = Math.max(2, Math.round((h - gh) / 4.4)), top = GROUND + gh + floors * 4.4;
-    for (let i = 0; i < 4; i++) {
-      const a = pts[i], b = pts[(i + 1) % 4];
-      const dx = b[0] - a[0], dz = b[1] - a[1], len = Math.hypot(dx, dz);
-      const n = [dz / len, 0, -dx / len];                // outward for CCW order viewed from above (y up)
-      const bays = Math.max(1, Math.round(len / 3.2));
-      // ground floor
-      quad(B.lo, [a[0], GROUND, a[1]], [b[0], GROUND, b[1]], [b[0], GROUND + gh, b[1]], [a[0], GROUND + gh, a[1]], n, [[0, 0], [bays, 0], [bays, 1], [0, 1]], col, seed);
-      quad(B.up, [a[0], GROUND + gh, a[1]], [b[0], GROUND + gh, b[1]], [b[0], top, b[1]], [a[0], top, a[1]], n, [[0, 0], [bays, 0], [bays, floors], [0, floors]], col, seed);
-      // projecting cornice: front face, soffit and top, sampled from a plain plaster spot of the tile
-      const o = 0.55, ch = 0.55, pu = [[0.04, 0.9], [0.06, 0.9], [0.06, 0.94], [0.04, 0.94]];
-      const ao = [a[0] + n[0] * o, a[1] + n[2] * o], bo = [b[0] + n[0] * o, b[1] + n[2] * o];
-      const ccol = col.map((v) => v * 1.08);
-      quad(B.up, [ao[0], top - ch, ao[1]], [bo[0], top - ch, bo[1]], [bo[0], top, bo[1]], [ao[0], top, ao[1]], n, pu, ccol, seed);
-      quad(B.up, [a[0], top - ch, a[1]], [ao[0], top - ch, ao[1]], [bo[0], top - ch, bo[1]], [b[0], top - ch, b[1]], [0, -1, 0], pu, col.map((v) => v * 0.95), seed);
-      quad(B.up, [a[0], top, a[1]], [b[0], top, b[1]], [bo[0], top, bo[1]], [ao[0], top, ao[1]], [0, 1, 0], pu, ccol, seed);
-    }
-    // hip roof
-    const rise = Math.min(w, d) * (0.09 + rr() * 0.07) + 0.7, ov = 0.4;
-    const rc = pts.map(([x, z]) => [cx + (x - cx) * (1 + ov / (w / 2)), cz + (z - cz) * (1 + ov / (d / 2))]);
-    const rw = w + 2 * ov, rd = d + 2 * ov;
-    const ridge = rw >= rd ? [[-(rw - rd) / 2, 0], [(rw - rd) / 2, 0]] : [[0, -(rd - rw) / 2], [0, (rd - rw) / 2]];
-    const rp = ridge.map(([x, z]) => [cx + x * cs - z * sn, cz + x * sn + z * cs]);
-    const y0 = top - 0.2, y1 = top + rise;
-    const rcol = roofCols[(rr() * roofCols.length) | 0].map((v) => v * (0.8 + rr() * 0.35));
-    const face = (p0, p1, p2, p3) => {
-      const e1 = [p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]], e2 = [p2[0] - p0[0], p2[1] - p0[1], p2[2] - p0[2]];
-      let nn = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]];
-      const l = Math.hypot(...nn) || 1; nn = nn.map((v) => v / l);
-      let q = p3 ? [p0, p1, p2, p3] : [p0, p1, p2];
-      if (nn[1] < 0) { nn = nn.map((v) => -v); q = p3 ? [p0, p3, p2, p1] : [p0, p2, p1]; }
-      const s = 0.5;
-      const uvf = (p) => [(p[0] + p[2]) * s * 0.5, p[1] * s];
-      for (const idx of p3 ? [[0, 1, 2], [0, 2, 3]] : [[0, 1, 2]]) for (const t of idx) { B.rf.p.push(...q[t]); B.rf.n.push(...nn); B.rf.uv.push(...uvf(q[t])); B.rf.c.push(...rcol); B.rf.s.push(seed); }
-    };
-    const v = (p, y) => [p[0], y, p[1]];
-    if (rw >= rd) { face(v(rc[0], y0), v(rc[1], y0), v(rp[1], y1), v(rp[0], y1)); face(v(rc[1], y0), v(rc[2], y0), v(rp[1], y1)); face(v(rc[2], y0), v(rc[3], y0), v(rp[0], y1), v(rp[1], y1)); face(v(rc[3], y0), v(rc[0], y0), v(rp[0], y1)); }
-    else { face(v(rc[1], y0), v(rc[2], y0), v(rp[1], y1), v(rp[0], y1)); face(v(rc[2], y0), v(rc[3], y0), v(rp[1], y1)); face(v(rc[3], y0), v(rc[0], y0), v(rp[0], y1), v(rp[1], y1)); face(v(rc[0], y0), v(rc[1], y0), v(rp[0], y1)); }
-    // chimney / altana
-    if (rr() < 0.55) B.prop.push({ x: cx + (rr() - 0.5) * w * 0.4, z: cz + (rr() - 0.5) * d * 0.4, y: top + rise * 0.55, rot, kind: rr() < 0.3 ? 'altana' : 'chimney', col });
-  };
-
-  // ---- BSP street plan
-  const exclusions = [
-    [-29, 29, -29, 29],                         // rotunda drum
-    [-20.5, 20.5, -50, -28],                    // portico
-    [PIAZZA.x0, PIAZZA.x1, PIAZZA.z0, PIAZZA.z1], // piazza
-    [-740, -640, -4000, 4000],                  // Tiber corridor
-  ];
-  const subtract = (L, E) => { // L minus E -> list of rects
-    const [lx0, lx1, lz0, lz1] = L, [ex0, ex1, ez0, ez1] = E;
-    if (ex1 <= lx0 || ex0 >= lx1 || ez1 <= lz0 || ez0 >= lz1) return [L];
-    const out = [];
-    if (ex0 > lx0) out.push([lx0, ex0, lz0, lz1]);
-    if (ex1 < lx1) out.push([ex1, lx1, lz0, lz1]);
-    const mx0 = Math.max(lx0, ex0), mx1 = Math.min(lx1, ex1);
-    if (ez0 > lz0) out.push([mx0, mx1, lz0, ez0]);
-    if (ez1 < lz1) out.push([mx0, mx1, ez1, lz1]);
-    return out;
-  };
-  const lots = [];
-  const R2 = mulberry32(555);
-  const bsp = (x0, x1, z0, z1, depth) => {
-    const w = x1 - x0, d = z1 - z0, cx = (x0 + x1) / 2, cz = (z0 + z1) / 2, dist = Math.hypot(cx, cz);
-    const target = dist < 170 ? 30 : dist < 420 ? 52 : dist < 900 ? 85 : 130;
-    if (Math.max(w, d) < target * (0.85 + R2() * 0.5) || depth > 14) { lots.push([x0, x1, z0, z1]); return; }
-    const gap = dist < 170 ? 3.8 + R2() * 2.6 : dist < 600 ? 6 + R2() * 6 : 12 + R2() * 12;
-    if (w > d) { const s = x0 + w * (0.38 + R2() * 0.24); bsp(x0, s - gap / 2, z0, z1, depth + 1); bsp(s + gap / 2, x1, z0, z1, depth + 1); }
-    else { const s = z0 + d * (0.38 + R2() * 0.24); bsp(x0, x1, z0, s - gap / 2, depth + 1); bsp(x0, x1, s + gap / 2, z1, depth + 1); }
-  };
-  const EXT = hq ? 1500 : 900;
-  bsp(-EXT, EXT, -EXT, EXT, 0);
-  // wedge fillers hugging the drum
-  const fillers = [[21.5, 29.5, -29.5, -21.5], [-29.5, -21.5, -29.5, -21.5], [21.5, 29.5, 21.5, 29.5], [-29.5, -21.5, 21.5, 29.5]];
-  let nNear = 0, nFar = 0;
-  const place = (rect, forced) => {
-    let pieces = [rect];
-    if (!forced) for (const E of exclusions) pieces = pieces.flatMap((p) => subtract(p, E));
-    // keep the biggest piece
-    let best = null, ba = 0; for (const p of pieces) { const a = (p[1] - p[0]) * (p[3] - p[2]); if (a > ba && p[1] - p[0] > 9 && p[3] - p[2] > 9) { best = p; ba = a; } }
-    if (!best) return;
-    const m = forced ? 0.2 : 0.55;
-    const [x0, x1, z0, z1] = best; const w = x1 - x0 - 2 * m, d = z1 - z0 - 2 * m, cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
-    const dist = Math.hypot(cx, cz), rr = mulberry32(((cx * 73856093) ^ (cz * 19349663)) >>> 0);
-    const isNear = dist < 150;
-    const h = forced ? 17 + rr() * 5 : (dist < 110 ? 17 + rr() * 8 : 13 + rr() * 11) + (rr() < 0.05 ? 8 : 0);
-    const rot = dist > 220 ? (rr() - 0.5) * 0.25 : 0;
-    // keep the piazza-facing rows tall and regular
-    addBuilding(isNear ? near : far, cx, cz, Math.max(6, w), Math.max(6, d), rot, h, rr);
-    isNear ? nNear++ : nFar++;
-  };
-  lots.forEach((l) => place(l, false));
-  fillers.forEach((l) => place(l, true));
-
-  const finalize = (B, castShadow) => {
-    const build = (D, mat) => {
-      if (!D.p.length) return null;
-      const g = new THREE.BufferGeometry();
-      g.setAttribute('position', new THREE.Float32BufferAttribute(D.p, 3));
-      g.setAttribute('normal', new THREE.Float32BufferAttribute(D.n, 3));
-      g.setAttribute('uv', new THREE.Float32BufferAttribute(D.uv, 2));
-      g.setAttribute('color', new THREE.Float32BufferAttribute(D.c, 3));
-      g.setAttribute('aSeed', new THREE.Float32BufferAttribute(D.s, 1));
-      const m = new THREE.Mesh(g, mat); m.castShadow = castShadow; m.receiveShadow = true; m.frustumCulled = false; return m;
-    };
-    [build(B.up, matUpper), build(B.lo, matLower), build(B.rf, roofMat)].forEach((m) => m && group.add(m));
-    // rooftop props
-    const chim = B.prop.filter((p) => p.kind === 'chimney'), alt = B.prop.filter((p) => p.kind === 'altana');
-    const brickM = new THREE.MeshStandardMaterial({ color: 0xa4694d, roughness: 0.95 });
-    const mC = new THREE.InstancedMesh(new THREE.BoxGeometry(0.7, 1.7, 0.7), brickM, chim.length || 1);
-    const mA = new THREE.InstancedMesh(new THREE.BoxGeometry(3.2, 3.0, 3.2), new THREE.MeshStandardMaterial({ color: 0xd9c19a, roughness: 0.9 }), alt.length || 1);
-    const tmp = new THREE.Matrix4(), q = new THREE.Quaternion();
-    chim.forEach((p, i) => { q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), -p.rot); mC.setMatrixAt(i, tmp.compose(new THREE.Vector3(p.x, p.y + 0.5, p.z), q, new THREE.Vector3(1, 1, 1))); });
-    alt.forEach((p, i) => { q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), -p.rot); mA.setMatrixAt(i, tmp.compose(new THREE.Vector3(p.x, p.y + 0.9, p.z), q, new THREE.Vector3(1, 1, 1))); });
-    mC.count = chim.length; mA.count = alt.length; mC.castShadow = mA.castShadow = castShadow; mC.frustumCulled = mA.frustumCulled = false;
-    group.add(mC, mA);
-  };
-  finalize(near, true); finalize(far, false);
+  // ---------------------------------------------------------------- the city (see city.js)
+  const { group: cityGroup, stats: cityStats } = buildCity({ nightU, PIAZZA, GROUND, hq });
+  group.add(cityGroup);
+  const nNear = cityStats.units, nFar = 0;
 
   // ---------------------------------------------------------------- café umbrellas, tables and chairs on the piazza
   {
     const rr = mulberry32(31);
     const spots = [];
-    for (const [x, z0, z1] of [[PIAZZA.x1 - 4.5, -112, -92], [PIAZZA.x0 + 4.5, -112, -88], [PIAZZA.x1 - 4.5, -85, -62], [PIAZZA.x0 + 4.5, -84, -56]]) {
+    for (const [x, z0, z1] of [[PIAZZA.x1 - 4.2, -110, -86], [PIAZZA.x1 - 4.2, -70, -52], [PIAZZA.x0 + 4.2, -112, -100], [PIAZZA.x0 + 4.2, -86, -52]]) {
       for (let z = z0; z <= z1; z += 6.5) spots.push([x + (rr() - 0.5) * 1.2, z + (rr() - 0.5) * 1.2]);
     }
     // north side (far end)
-    for (let x = -30; x <= 30; x += 7) if (Math.abs(x) > 8) spots.push([x, PIAZZA.z0 + 5.5]);
+    for (let x = -17; x <= 17; x += 7) if (Math.abs(x) > 6) spots.push([x, PIAZZA.z0 + 5.5]);
     const n = spots.length;
     const poleG = new THREE.CylinderGeometry(0.04, 0.04, 2.6, 6); poleG.translate(0, 1.3, 0);
     const canopyG = new THREE.ConeGeometry(1.7, 0.7, 8, 1, true); canopyG.translate(0, 2.95, 0);
@@ -295,8 +139,8 @@ export function buildWorld({ hq = true } = {}) {
 
   // ---------------------------------------------------------------- wall lanterns around the piazza (glow at night)
   const lanternPos = [];
-  for (let z = -112; z <= -50; z += 9) { lanternPos.push([PIAZZA.x0 + 0.2, 5.2, z], [PIAZZA.x1 - 0.2, 5.2, z]); }
-  for (let x = -32; x <= 32; x += 9) lanternPos.push([x, 5.2, PIAZZA.z0 + 0.2]);
+  for (let z = PIAZZA.z0 + 3; z <= -40; z += 8) { lanternPos.push([PIAZZA.x0 + 0.2, 5.4, z], [PIAZZA.x1 - 0.2, 5.4, z]); }
+  for (let x = -26; x <= 26; x += 8) lanternPos.push([x, 5.4, PIAZZA.z0 + 0.2]);
   const lanternMat = new THREE.MeshBasicMaterial({ color: 0xffb060, toneMapped: false });
   const lanterns = new THREE.InstancedMesh(new THREE.SphereGeometry(0.22, 10, 8), lanternMat, lanternPos.length);
   lanternPos.forEach((p, i) => lanterns.setMatrixAt(i, new THREE.Matrix4().makeTranslation(p[0], p[1], p[2])));
@@ -394,7 +238,7 @@ export function buildWorld({ hq = true } = {}) {
 
   return {
     group, nightU, updaters, fountain, glowMats: { lantern: lanternMat, pool: poolMat }, stats: { near: nNear, far: nFar },
-    setNight(n) { nightU.value = n; const k = smoothstep01(n); flood.forEach((f) => { f.l.intensity = f.I * k; }); porchGlow.intensity = 55 * k; poolMat.opacity = n * 0.55; lanternMat.color.setRGB(1, 0.65, 0.3).multiplyScalar(0.25 + 2.6 * n); },
+    setNight(n) { nightU.value = n; lanterns.visible = n > 0.04; const k = smoothstep01(n); flood.forEach((f) => { f.l.intensity = f.I * k; }); porchGlow.intensity = 55 * k; poolMat.opacity = n * 0.8; lanternMat.color.setRGB(1, 0.65, 0.3).multiplyScalar(0.25 + 2.6 * n); },
     setWet(w) { groundMat.roughness = lerp(0.82, 0.3, w); groundMat.color.setScalar(lerp(1, 0.68, w)); },
     update(t) { for (const u of updaters) u(t); },
   };
