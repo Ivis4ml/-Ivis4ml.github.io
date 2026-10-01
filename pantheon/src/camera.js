@@ -1,283 +1,210 @@
-// Camera control: orbit, first-person walk (with simple collision), cinematic tour, animated flights.
+// Street-view style navigation: you stand in the piazza at eye height, drag to look around, click the ground to
+// walk there (or use WASD). A single "bird's-eye" toggle lifts you above the roofs; clicking the ground from up
+// there drops you down at that spot.
 import * as THREE from 'three';
-import { clamp, lerp, smoothstep, DEG, TAU } from './util.js';
+import { clamp, lerp, DEG } from './util.js';
 import { DIM } from './pantheon.js';
 import { PIAZZA, FOUNTAIN } from './world.js';
 import { groundY } from './life.js';
 
 // ----------------------------------------------------------------------- walkable area
 const COLS = [];
-{
-  for (const x of DIM.colXs) COLS.push([x, DIM.porticoZ]);
-  for (const z of [DIM.porticoZ + 4.8, DIM.porticoZ + 9.6]) for (const x of [-7.35, -2.9, 2.9, 7.35]) COLS.push([x, z]);
-}
+for (const x of DIM.colXs) COLS.push([x, DIM.porticoZ]);
+for (const z of [DIM.porticoZ + 4.8, DIM.porticoZ + 9.6]) for (const x of [-7.35, -2.9, 2.9, 7.35]) COLS.push([x, z]);
 export function walkable(x, z) {
   const r = Math.hypot(x, z);
-  if (r < 20.9) {
-    // niche columns / aedicule columns ignored (they sit at the wall); keep off the wall
-    return true;
-  }
-  if (Math.abs(x) < 1.9 && z > -29.2 && z < -20.5) return true;                      // door tunnel
-  if (Math.abs(x) < 16.0 && z > -44.4 && z < -29.6) {                                   // portico
+  if (r < 20.6) return true;                                                          // rotunda
+  if (Math.abs(x) < 1.9 && z > -29.2 && z < -20.5) return true;                       // doorway
+  if (Math.abs(x) < 16.2 && z > -44.4 && z < -29.6) {                                 // portico
     for (const [cx, cz] of COLS) if (Math.hypot(x - cx, z - cz) < 1.05) return false;
     return true;
   }
-  if (Math.abs(x) < 19.5 && z > -46.6 && z <= -44.4) return true;                       // steps
-  if (x > PIAZZA.x0 + 1 && x < PIAZZA.x1 - 1 && z > PIAZZA.z0 + 1 && z < PIAZZA.z1) {  // piazza
+  if (Math.abs(x) < 19.5 && z > -46.6 && z <= -44.4) return true;                     // steps
+  if (x > PIAZZA.x0 + 0.8 && x < PIAZZA.x1 - 0.8 && z > PIAZZA.z0 + 0.8 && z < PIAZZA.z1) {
     if (Math.hypot(x - FOUNTAIN.x, z - FOUNTAIN.z) < 5.9) return false;
     return true;
   }
+  if (x > PIAZZA.x0 + 0.8 && x < PIAZZA.x1 - 0.8 && z >= PIAZZA.z1 && z < -29.5 && Math.abs(x) > 19) return true; // flanks of the portico
   return false;
 }
 
-// ----------------------------------------------------------------------- views
-export const VIEWS = {
-  piazza:   { label: '广场', en: 'Piazza',  pos: [-26, 1.7, -100], look: [0, 13, -40], fov: 58, mode: 'walk' },
-  facade:   { label: '门廊', en: 'Portico', pos: [3, 1.7, -62],    look: [0, 12, -42], fov: 60, mode: 'walk' },
-  nave:     { label: '前廊内', en: 'Pronaos', pos: [0, 1.7, -41],   look: [0, 5.5, -27], fov: 68, mode: 'walk' },
-  rotunda:  { label: '圆厅', en: 'Rotunda', pos: [0, 1.7, -14],    look: [0, 12, 12],  fov: 78, mode: 'walk' },
-  oculus:   { label: '眼窗', en: 'Oculus',  pos: [0, 1.7, 3],      look: [0, 42, -1],  fov: 76, mode: 'walk' },
-  apse:     { label: '主祭坛', en: 'Apse',  pos: [0, 1.7, -17],    look: [0, 6, 20],   fov: 70, mode: 'walk' },
-  aerial:   { label: '航拍', en: 'Aerial',  target: [0, 14, -34], dist: 210, yaw: 215, pitch: 26, fov: 50, mode: 'orbit' },
-  dome:     { label: '穹顶之上', en: 'Above', target: [0, 40, -4], dist: 70, yaw: 20, pitch: 55, fov: 52, mode: 'orbit' },
+export const START = { pos: [-9, 1.65, -99], look: [3, 9, -44], fov: 56 };
+export const SPOTS = {
+  piazza: { label: '广场', pos: [-9, 1.65, -99], look: [3, 9, -44] },
+  portico: { label: '门廊', pos: [0, 1.65, -41.5], look: [0, 5.5, -27] },
+  rotunda: { label: '圆厅', pos: [0, 1.65, -14], look: [0, 9, 12] },
+  oculus: { label: '眼窗下', pos: [0, 1.65, 3], look: [0, 42, -1] },
 };
 
-// ----------------------------------------------------------------------- tour keyframes
-// [time, pos, look, fov, solar hour]
-export const TOUR = [
-  [0,   [-380, 240, -470], [0, 25, -30], 50, 5.4],
-  [12,  [-160, 120, -250], [0, 22, -30], 50, 6.1],
-  [24,  [-20, 36, -121],   [0, 15, -45], 52, 6.9],
-  [36,  [-14, 2.4, -84],   [0, 12, -44], 55, 7.5],
-  [47,  [-2, 1.8, -62],    [0, 13, -42], 58, 7.9],
-  [57,  [0, 1.7, -47.5],   [0, 15, -44], 62, 8.2],
-  [65,  [0, 1.7, -37],     [0, 5.5, -27], 66, 8.5],
-  [73,  [0, 1.7, -26],     [0, 4.5, -10], 70, 8.9],
-  [81,  [4, 1.7, -10],     [-14, 15, 2],  74, 9.4],
-  [93,  [0, 1.7, -3],      [0, 40, -2],   76, 11.0],
-  [105, [6, 1.7, 8],       [-2, 1, -14],  72, 13.0],
-  [117, [-6, 1.7, 8],      [10, 12, -12], 72, 15.0],
-  [127, [0, 1.7, -8],      [0, 2.5, -30], 70, 16.0],
-  [137, [0, 1.7, -33],     [0, 6, -50],   66, 16.6],
-  [146, [0, 3, -62],       [0, 14, -45],  56, 17.3],
-  [156, [0, 80, -22],      [0, 43, -2],   55, 18.0],
-  [168, [70, 60, -100],    [0, 20, -30],  50, 18.9],
-  [180, [160, 110, -200],  [0, 25, -30],  48, 19.7],
-  [192, [120, 55, 110],    [0, 25, -30],  48, 20.4],
-  [204, [-30, 28, -112],   [0, 18, -40],  52, 21.0],
-  [214, [-20, 3.0, -92],   [0, 12, -48],  56, 21.7],
-];
-export const TOUR_LENGTH = TOUR[TOUR.length - 1][0];
-
-function cr(p0, p1, p2, p3, u, out) { // centripetal-ish Catmull-Rom (uniform) for Vector3
-  const u2 = u * u, u3 = u2 * u;
-  out.x = 0.5 * ((2 * p1.x) + (-p0.x + p2.x) * u + (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * u2 + (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * u3);
-  out.y = 0.5 * ((2 * p1.y) + (-p0.y + p2.y) * u + (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * u2 + (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * u3);
-  out.z = 0.5 * ((2 * p1.z) + (-p0.z + p2.z) * u + (2 * p0.z - 5 * p1.z + 4 * p2.z - p3.z) * u2 + (-p0.z + 3 * p1.z - 3 * p2.z + p3.z) * u3);
-  return out;
-}
-
 export class CameraRig {
-  constructor(camera, dom) {
-    this.camera = camera; this.dom = dom;
-    this.mode = 'orbit';
-    // orbit state
-    this.target = new THREE.Vector3(0, 14, -34); this.dist = 210; this.yaw = 215 * DEG; this.pitch = 26 * DEG;
-    this.vyaw = 0; this.vpitch = 0; this.vzoom = 0;
-    // walk state
-    this.pos = new THREE.Vector3(-26, 1.7, -100); this.wyaw = 0; this.wpitch = 0.1; this.eye = 1.68;
-    this.keys = new Set(); this.stick = { x: 0, y: 0 };
-    this.bob = 0; this.vel = new THREE.Vector3();
-    // tour
-    this.tourT = 0; this.tourPlaying = false; this.tourHour = 12; this.fovTarget = 58;
-    // flight
+  /** pickGround(ndcX, ndcY) -> THREE.Vector3 | null  (supplied by main: ray vs. pavement) */
+  constructor(camera, dom, pickGround) {
+    this.camera = camera; this.dom = dom; this.pickGround = pickGround;
+    this.mode = 'walk';
+    this.pos = new THREE.Vector3(...START.pos); this.yaw = 0; this.pitch = 0; this.fovTarget = START.fov; this.fovMin = 28; this.fovMax = 78;
+    this.lookAtPoint(START.look);
+    this.target = null;               // click-to-walk destination
+    this.keys = new Set(); this.stick = { x: 0, y: 0 }; this.vel = new THREE.Vector3(); this.bob = 0;
+    // orbit (bird's-eye)
+    this.otarget = new THREE.Vector3(0, 14, -34); this.dist = 220; this.oyaw = 215 * DEG; this.opitch = 28 * DEG;
     this.flight = null;
-    this._p = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
-    this._l = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
-    this.onUserInput = () => {};
+    this.onEvent = () => {};
+    this.hover = null; this.moving = false;
     this.bind();
-    this.setOrbitFromView(VIEWS.aerial);
     this.apply();
   }
 
+  lookAtPoint(p) { const d = new THREE.Vector3(...p).sub(this.pos); this.yaw = Math.atan2(-d.x, -d.z); this.pitch = Math.asin(clamp(d.y / d.length(), -1, 1)); }
+
   // ------------------------------------------------------------------ input
   bind() {
-    const el = this.dom; const ptrs = new Map(); let pinch = 0;
+    const el = this.dom; const ptrs = new Map(); let pinch = 0, down = null;
     el.addEventListener('contextmenu', (e) => e.preventDefault());
     el.addEventListener('pointerdown', (e) => {
-      el.setPointerCapture(e.pointerId); ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY, b: e.button, sx: e.clientX, sy: e.clientY });
-      if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch = Math.hypot(a.x - b.x, a.y - b.y); }
-      this.userTouched();
+      el.setPointerCapture(e.pointerId); ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY, b: e.button });
+      if (ptrs.size === 1) down = { x: e.clientX, y: e.clientY, t: performance.now(), moved: 0, b: e.button };
+      if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch = Math.hypot(a.x - b.x, a.y - b.y); if (down) down.moved = 99; }
+      this.onEvent('input');
     });
     el.addEventListener('pointermove', (e) => {
-      const p = ptrs.get(e.pointerId); if (!p) return;
+      const p = ptrs.get(e.pointerId);
+      if (!p) { this.hover = { x: e.clientX, y: e.clientY }; return; }       // hover (mouse, no button)
       const dx = e.clientX - p.x, dy = e.clientY - p.y; p.x = e.clientX; p.y = e.clientY;
+      if (down) down.moved += Math.abs(dx) + Math.abs(dy);
       if (this.flight) return;
-      if (ptrs.size === 2) {
-        const [a, b] = [...ptrs.values()]; const d = Math.hypot(a.x - b.x, a.y - b.y);
-        if (this.mode === 'orbit') this.dist = clamp(this.dist * (pinch / d), 4, 2500);
-        else this.walkMove(0, (d - pinch) * 0.02);
-        pinch = d; return;
-      }
+      if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; const d = Math.hypot(a.x - b.x, a.y - b.y); if (this.mode === 'orbit') this.dist = clamp(this.dist * (pinch / d), 8, 2500); else this.fovTarget = clamp(this.fovTarget * (pinch / d), this.fovMin, this.fovMax); pinch = d; return; }
+      if (down && down.moved < 5) return;                                       // not yet a drag
       if (this.mode === 'orbit') {
-        if (p.b === 2 || e.shiftKey) { this.pan(dx, dy); }
-        else { this.vyaw -= dx * 0.0022; this.vpitch += dy * 0.0022; this.yaw -= dx * 0.0035; this.pitch = clamp(this.pitch + dy * 0.0035, -0.15, 1.5); }
-      } else if (this.mode === 'walk') {
-        this.wyaw -= dx * 0.0032; this.wpitch = clamp(this.wpitch - dy * 0.0032, -1.45, 1.45);
+        if (p.b === 2 || e.shiftKey) this.pan(dx, dy);
+        else { this.oyaw -= dx * 0.0035; this.opitch = clamp(this.opitch + dy * 0.0035, 0.05, 1.5); }
+      } else {                                                                  // grab-the-world look, like a panorama viewer
+        const k = 0.0032 * (this.camera.fov / 56);
+        this.yaw += dx * k; this.pitch = clamp(this.pitch + dy * k, -1.45, 1.45);
       }
     });
-    const up = (e) => { ptrs.delete(e.pointerId); };
-    el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
+    const up = (e) => {
+      const had = ptrs.delete(e.pointerId);
+      if (had && down && ptrs.size === 0 && down.moved < 5 && performance.now() - down.t < 450 && down.b === 0) this.onClick(e.clientX, e.clientY);
+      if (ptrs.size === 0) down = null;
+    };
+    el.addEventListener('pointerup', up); el.addEventListener('pointercancel', (e) => { ptrs.delete(e.pointerId); down = null; });
+    el.addEventListener('pointerleave', () => { this.hover = null; });
     el.addEventListener('wheel', (e) => {
-      e.preventDefault(); this.userTouched();
-      if (this.mode === 'orbit') this.dist = clamp(this.dist * Math.exp(e.deltaY * 0.0012), 4, 2500);
-      else if (this.mode === 'walk') this.walkMove(0, -e.deltaY * 0.01);
+      e.preventDefault(); this.onEvent('input');
+      if (this.mode === 'orbit') this.dist = clamp(this.dist * Math.exp(e.deltaY * 0.0012), 8, 2500);
+      else this.fovTarget = clamp(this.fovTarget * Math.exp(e.deltaY * 0.0009), this.fovMin, this.fovMax);   // zoom like a lens
     }, { passive: false });
     addEventListener('keydown', (e) => {
-      if (e.target && ['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName)) return;
-      this.keys.add(e.code); if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
-      if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) this.userTouched(true);
+      if (e.target && /INPUT|SELECT|TEXTAREA/.test(e.target.tagName)) return;
+      this.keys.add(e.code); if (/Arrow|Space/.test(e.code)) e.preventDefault();
+      if (/^(Key[WASD]|Arrow)/.test(e.code)) { this.target = null; this.onEvent('input'); }
     });
     addEventListener('keyup', (e) => this.keys.delete(e.code));
     addEventListener('blur', () => this.keys.clear());
   }
-  userTouched(keys = false) {
-    if (this.mode === 'tour') { this.setMode('orbit'); this.onUserInput('tour-stop'); }
-    if (this.flight) { this.flight = null; }
-    this.onUserInput('input');
-  }
-  pan(dx, dy) {
-    const c = this.camera; const right = new THREE.Vector3().setFromMatrixColumn(c.matrixWorld, 0), up = new THREE.Vector3().setFromMatrixColumn(c.matrixWorld, 1);
-    const k = this.dist * 0.0016; this.target.addScaledVector(right, -dx * k).addScaledVector(up, dy * k);
-  }
-  walkMove(fwd, amount) { const f = new THREE.Vector3(-Math.sin(this.wyaw), 0, -Math.cos(this.wyaw)); this.tryMove(f.multiplyScalar(amount)); }
-  tryMove(d) {
-    const nx = this.pos.x + d.x, nz = this.pos.z + d.z;
-    if (walkable(nx, nz)) { this.pos.x = nx; this.pos.z = nz; }
-    else if (walkable(nx, this.pos.z)) this.pos.x = nx;
-    else if (walkable(this.pos.x, nz)) this.pos.z = nz;
-  }
+  pan(dx, dy) { const c = this.camera; const r = new THREE.Vector3().setFromMatrixColumn(c.matrixWorld, 0), u = new THREE.Vector3().setFromMatrixColumn(c.matrixWorld, 1); const k = this.dist * 0.0016; this.otarget.addScaledVector(r, -dx * k).addScaledVector(u, dy * k); }
 
-  // ------------------------------------------------------------------ modes
-  setMode(m) {
-    if (m === this.mode) return;
-    const c = this.camera;
-    if (m === 'walk') {
-      const dir = new THREE.Vector3(); c.getWorldDirection(dir);
-      this.wyaw = Math.atan2(-dir.x, -dir.z); this.wpitch = Math.asin(clamp(dir.y, -1, 1));
-      if (!walkable(c.position.x, c.position.z) || c.position.y > 6) this.pos.set(-26, 1.7, -96);
-      else this.pos.set(c.position.x, 1.7, c.position.z);
-    } else if (m === 'orbit') {
-      const dir = new THREE.Vector3(); c.getWorldDirection(dir);
-      if (this.mode === 'walk' || this.mode === 'tour') {
-        this.target.copy(c.position).addScaledVector(dir, Math.max(25, this.mode === 'tour' ? 60 : 30));
-        this.dist = c.position.distanceTo(this.target);
-        const d = c.position.clone().sub(this.target); this.yaw = Math.atan2(d.x, d.z); this.pitch = Math.asin(clamp(d.y / this.dist, -1, 1));
-      }
+  onClick(cx, cy) {
+    const ndcX = (cx / innerWidth) * 2 - 1, ndcY = -(cy / innerHeight) * 2 + 1;
+    const p = this.pickGround(ndcX, ndcY); if (!p) return;
+    if (this.mode === 'orbit') { this.descendTo(p); return; }
+    if (walkable(p.x, p.z)) { this.target = p.clone(); this.onEvent('click'); }
+    else {                                                                      // clicked a wall / fountain: go as close as possible
+      const d = p.clone().sub(this.pos); const len = d.length(); d.normalize();
+      for (let t = len; t > 0.5; t -= 0.6) { const q = this.pos.clone().addScaledVector(d, t); if (walkable(q.x, q.z)) { this.target = q; this.onEvent('click'); break; } }
     }
-    this.mode = m; this.flight = null;
-  }
-  setOrbitFromView(v) { this.target.fromArray(v.target); this.dist = v.dist; this.yaw = v.yaw * DEG; this.pitch = v.pitch * DEG; }
-  startTour(from = 0) { this.setMode('tour'); this.tourT = from; this.tourPlaying = true; this.flight = null; }
-
-  /** fly to a named view */
-  goTo(name, duration = 2.6) {
-    const v = VIEWS[name]; if (!v) return;
-    const c = this.camera;
-    const toPos = new THREE.Vector3(), toLook = new THREE.Vector3();
-    if (v.mode === 'orbit') {
-      const cp = Math.cos(v.pitch * DEG), t = new THREE.Vector3().fromArray(v.target);
-      toPos.set(t.x + Math.sin(v.yaw * DEG) * cp * v.dist, t.y + Math.sin(v.pitch * DEG) * v.dist, t.z + Math.cos(v.yaw * DEG) * cp * v.dist); toLook.copy(t);
-    } else { toPos.fromArray(v.pos); toLook.fromArray(v.look); }
-    const dir = new THREE.Vector3(); c.getWorldDirection(dir);
-    const fromLook = c.position.clone().addScaledVector(dir, 40);
-    this.flight = { t: 0, dur: duration, fromPos: c.position.clone(), fromLook, toPos, toLook, fromFov: c.fov, toFov: v.fov, view: v, mid: null };
-    // arc the path up a little for long hops
-    const d = toPos.distanceTo(c.position); this.flight.lift = clamp(d * 0.12, 0, 40);
-    if (this.mode === 'tour') this.mode = 'orbit';
   }
 
-  // ------------------------------------------------------------------ per-frame
+  // ------------------------------------------------------------------ transitions
+  flyTo(pos, look, fov, dur, onEnd) {
+    const c = this.camera, d = new THREE.Vector3(); c.getWorldDirection(d);
+    this.flight = { t: 0, dur, fromPos: c.position.clone(), fromLook: c.position.clone().addScaledVector(d, 60), toPos: pos.clone(), toLook: new THREE.Vector3(...look), fromFov: c.fov, toFov: fov, onEnd };
+    this.flight.lift = clamp(pos.distanceTo(c.position) * 0.1, 0, 30); this.target = null;
+  }
+  goSpot(name) {
+    const s = SPOTS[name]; if (!s) return;
+    const toPos = new THREE.Vector3(...s.pos); const wasOrbit = this.mode === 'orbit';
+    this.flyTo(toPos, s.look, name === 'oculus' ? 74 : 62, 2.2, () => { this.mode = 'walk'; this.pos.copy(toPos); this.lookAtPoint(s.look); this.fovTarget = this.camera.fov; });
+    if (wasOrbit) this.mode = 'flight';
+  }
+  ascend() {
+    if (this.mode === 'orbit') return;
+    const c = this.camera.position; const dir = new THREE.Vector3(); this.camera.getWorldDirection(dir);
+    this.otarget.set(c.x + dir.x * 30, 12, c.z + dir.z * 30); this.oyaw = Math.atan2(c.x - this.otarget.x, c.z - this.otarget.z) + 0.0; this.opitch = 0.5; this.dist = 140;
+    const cp = Math.cos(this.opitch), t = this.otarget, d = this.dist;
+    const to = new THREE.Vector3(t.x + Math.sin(this.oyaw) * cp * d, t.y + Math.sin(this.opitch) * d, t.z + Math.cos(this.oyaw) * cp * d);
+    this.mode = 'flight'; this.flyTo(to, [t.x, t.y, t.z], 50, 2.6, () => { this.mode = 'orbit'; this.fovTarget = 50; });
+  }
+  descendTo(p) {
+    const q = walkable(p.x, p.z) ? p : null; if (!q) return;
+    const to = new THREE.Vector3(q.x, groundY(q.x, q.z) + 1.65, q.z); const look = [0, 9, Math.min(-30, q.z + 40)];
+    this.mode = 'flight'; this.flyTo(to, look, 58, 2.4, () => { this.mode = 'walk'; this.pos.copy(to); this.lookAtPoint(look); this.fovTarget = 58; });
+  }
+
+  // ------------------------------------------------------------------ per frame
   update(dt) {
     const c = this.camera;
-    if (this.flight) this.updateFlight(dt);
-    else if (this.mode === 'tour' && this.tourPlaying) this.updateTour(dt);
-    else if (this.mode === 'walk') this.updateWalk(dt);
-    else if (this.mode === 'orbit') this.updateOrbit(dt);
+    if (this.flight) { this.updateFlight(dt); return; }
+    if (this.mode === 'orbit') this.updateOrbit(dt); else this.updateWalk(dt);
     this.apply();
+    c.fov = lerp(c.fov, this.fovTarget, 1 - Math.exp(-dt * 8)); c.updateProjectionMatrix();
   }
-  apply() {
-    const c = this.camera;
-    if (this.flight || this.mode === 'tour') return;
-    if (this.mode === 'orbit') {
-      const cp = Math.cos(this.pitch);
-      c.position.set(this.target.x + Math.sin(this.yaw) * cp * this.dist, this.target.y + Math.sin(this.pitch) * this.dist, this.target.z + Math.cos(this.yaw) * cp * this.dist);
-      if (c.position.y < -0.2) c.position.y = -0.2;
-      c.lookAt(this.target);
-    } else if (this.mode === 'walk') {
-      const gy = groundY(this.pos.x, this.pos.z);
-      c.position.set(this.pos.x, gy + this.eye + Math.sin(this.bob) * 0.03, this.pos.z);
-      c.rotation.set(this.wpitch, this.wyaw, 0, 'YXZ');
-    }
-  }
-  updateOrbit(dt) {
-    if (!this.dragging) { /* inertia handled in input */ }
-    // key controls in orbit: WASD pans target, Q/E zoom
-    const k = this.keys; const spd = this.dist * 0.6 * dt;
-    if (k.size) {
-      const f = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw)), r = new THREE.Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
-      if (k.has('KeyW') || k.has('ArrowUp')) this.target.addScaledVector(f, spd);
-      if (k.has('KeyS') || k.has('ArrowDown')) this.target.addScaledVector(f, -spd);
-      if (k.has('KeyA') || k.has('ArrowLeft')) this.target.addScaledVector(r, -spd);
-      if (k.has('KeyD') || k.has('ArrowRight')) this.target.addScaledVector(r, spd);
-      if (k.has('KeyE')) this.dist *= 1 - dt * 0.9; if (k.has('KeyQ')) this.dist *= 1 + dt * 0.9;
-    }
-    this.dist = clamp(this.dist, 4, 2500);
-    this.camera.fov = lerp(this.camera.fov, this.fovTarget, 1 - Math.exp(-dt * 3)); this.camera.updateProjectionMatrix();
+  tryMove(dx, dz) {
+    const nx = this.pos.x + dx, nz = this.pos.z + dz;
+    if (walkable(nx, nz)) { this.pos.x = nx; this.pos.z = nz; return true; }
+    if (walkable(nx, this.pos.z)) { this.pos.x = nx; return true; }
+    if (walkable(this.pos.x, nz)) { this.pos.z = nz; return true; }
+    return false;
   }
   updateWalk(dt) {
     const k = this.keys; let fwd = 0, str = 0;
     if (k.has('KeyW') || k.has('ArrowUp')) fwd += 1; if (k.has('KeyS') || k.has('ArrowDown')) fwd -= 1;
     if (k.has('KeyD')) str += 1; if (k.has('KeyA')) str -= 1;
     fwd += -this.stick.y; str += this.stick.x;
-    if (k.has('ArrowLeft')) this.wyaw += dt * 1.6; if (k.has('ArrowRight')) this.wyaw -= dt * 1.6;
-    const run = k.has('ShiftLeft') || k.has('ShiftRight') ? 2.4 : 1;
-    const speed = 2.6 * run;
-    const f = new THREE.Vector3(-Math.sin(this.wyaw), 0, -Math.cos(this.wyaw)), r = new THREE.Vector3(Math.cos(this.wyaw), 0, -Math.sin(this.wyaw));
-    const want = f.multiplyScalar(fwd).add(r.multiplyScalar(str)); if (want.lengthSq() > 1) want.normalize();
-    this.vel.lerp(want.multiplyScalar(speed), 1 - Math.exp(-dt * 9));
-    this.tryMove(this.vel.clone().multiplyScalar(dt));
-    this.bob += this.vel.length() * dt * 2.4;
-    this.camera.fov = lerp(this.camera.fov, this.fovTarget, 1 - Math.exp(-dt * 3)); this.camera.updateProjectionMatrix();
+    if (k.has('ArrowLeft')) this.yaw += dt * 1.4; if (k.has('ArrowRight')) this.yaw -= dt * 1.4;
+    const f = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw)), r = new THREE.Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
+    let want = f.clone().multiplyScalar(fwd).add(r.clone().multiplyScalar(str));
+    let speed = 1.9 * (k.has('ShiftLeft') || k.has('ShiftRight') ? 2.2 : 1);
+    if (this.target && want.lengthSq() < 1e-4) {                                // click-to-walk: glide toward the spot, turning to face it
+      const d = new THREE.Vector3(this.target.x - this.pos.x, 0, this.target.z - this.pos.z), len = d.length();
+      if (len < 0.25) { this.target = null; want.set(0, 0, 0); }
+      else {
+        d.normalize(); want.copy(d); speed = Math.min(4.2, 1.6 + len * 0.55);
+        const wy = Math.atan2(-d.x, -d.z); let da = wy - this.yaw; da = Math.atan2(Math.sin(da), Math.cos(da)); this.yaw += da * Math.min(1, dt * 1.8);
+      }
+    } else if (want.lengthSq() > 1) want.normalize();
+    this.vel.lerp(want.multiplyScalar(speed), 1 - Math.exp(-dt * 6));
+    const before = this.pos.clone();
+    const moved = this.tryMove(this.vel.x * dt, this.vel.z * dt);
+    if (this.target && !moved) this.target = null;
+    this.moving = before.distanceToSquared(this.pos) > 1e-6;
+    this.bob += this.vel.length() * dt * 2.1;
   }
-  updateFlight(dt) {
-    const F = this.flight; F.t += dt; const u = clamp(F.t / F.dur); const e = u * u * u * (u * (u * 6 - 15) + 10);
+  updateOrbit(dt) {
+    const k = this.keys, spd = this.dist * 0.6 * dt;
+    if (k.size) {
+      const f = new THREE.Vector3(-Math.sin(this.oyaw), 0, -Math.cos(this.oyaw)), r = new THREE.Vector3(Math.cos(this.oyaw), 0, -Math.sin(this.oyaw));
+      if (k.has('KeyW') || k.has('ArrowUp')) this.otarget.addScaledVector(f, spd); if (k.has('KeyS') || k.has('ArrowDown')) this.otarget.addScaledVector(f, -spd);
+      if (k.has('KeyA') || k.has('ArrowLeft')) this.otarget.addScaledVector(r, -spd); if (k.has('KeyD') || k.has('ArrowRight')) this.otarget.addScaledVector(r, spd);
+    }
+    this.dist = clamp(this.dist, 8, 2500);
+  }
+  apply() {
     const c = this.camera;
-    c.position.lerpVectors(F.fromPos, F.toPos, e); c.position.y += Math.sin(e * Math.PI) * F.lift;
-    const look = new THREE.Vector3().lerpVectors(F.fromLook, F.toLook, e);
-    c.lookAt(look); c.fov = lerp(F.fromFov, F.toFov, e); c.updateProjectionMatrix();
-    if (u >= 1) {
-      const v = F.view; this.flight = null; this.fovTarget = v.fov;
-      if (v.mode === 'orbit') { this.mode = 'orbit'; this.setOrbitFromView(v); }
-      else { this.mode = 'walk'; this.pos.set(v.pos[0], 1.7, v.pos[2]); const d = new THREE.Vector3().fromArray(v.look).sub(new THREE.Vector3().fromArray(v.pos)).normalize(); this.wyaw = Math.atan2(-d.x, -d.z); this.wpitch = Math.asin(d.y); }
-      this.onUserInput('flight-end');
+    if (this.mode === 'orbit') {
+      const cp = Math.cos(this.opitch);
+      c.position.set(this.otarget.x + Math.sin(this.oyaw) * cp * this.dist, Math.max(2, this.otarget.y + Math.sin(this.opitch) * this.dist), this.otarget.z + Math.cos(this.oyaw) * cp * this.dist);
+      c.lookAt(this.otarget);
+    } else {
+      const gy = groundY(this.pos.x, this.pos.z);
+      c.position.set(this.pos.x, gy + 1.65 + Math.sin(this.bob) * 0.025, this.pos.z);
+      c.rotation.set(this.pitch, this.yaw, 0, 'YXZ');
     }
   }
-  updateTour(dt) {
-    this.tourT += dt;
-    if (this.tourT >= TOUR_LENGTH) { this.tourT = 0; this.onUserInput('tour-loop'); }
-    const t = this.tourT; let i = 0; while (i < TOUR.length - 2 && TOUR[i + 1][0] <= t) i++;
-    const a = TOUR[i], b = TOUR[i + 1]; const u = clamp((t - a[0]) / (b[0] - a[0]));
-    const g = (k) => TOUR[clamp(k, 0, TOUR.length - 1)];
-    const P = this._p, L = this._l;
-    for (let k = 0; k < 4; k++) { P[k].fromArray(g(i - 1 + k)[1]); L[k].fromArray(g(i - 1 + k)[2]); }
-    const pos = cr(P[0], P[1], P[2], P[3], u, this._pos || (this._pos = new THREE.Vector3()));
-    const look = cr(L[0], L[1], L[2], L[3], u, this._look || (this._look = new THREE.Vector3()));
-    const c = this.camera;
-    c.position.copy(pos); c.lookAt(look);
-    const f = lerp(a[3], b[3], u); if (Math.abs(c.fov - f) > 0.01) { c.fov = f; c.updateProjectionMatrix(); }
-    this.tourHour = lerp(a[4], b[4], u * u * (3 - 2 * u) * 0.0 + u);
-    // keep the camera above the ground
-    if (c.position.y < 0.9 && !(Math.hypot(c.position.x, c.position.z) < 29)) c.position.y = 0.9;
+  updateFlight(dt) {
+    const F = this.flight; F.t += dt; const u = clamp(F.t / F.dur), e = u * u * u * (u * (u * 6 - 15) + 10), c = this.camera;
+    c.position.lerpVectors(F.fromPos, F.toPos, e); c.position.y += Math.sin(e * Math.PI) * F.lift;
+    c.lookAt(new THREE.Vector3().lerpVectors(F.fromLook, F.toLook, e)); c.fov = lerp(F.fromFov, F.toFov, e); c.updateProjectionMatrix();
+    if (u >= 1) { const cb = F.onEnd; this.flight = null; cb && cb(); this.onEvent('arrived'); }
   }
 }

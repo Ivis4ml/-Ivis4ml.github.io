@@ -153,15 +153,16 @@ const dirOf = (phi, alpha) => [Math.cos(alpha) * Math.cos(phi), Math.sin(alpha),
 export function buildCoffers({
   R = 21.65, cy = 21.65, cols = 28, phase = 0,
   alphas = [12, 26, 39.5, 52, 63, 72],
-  margins = [0.075, 0.16, 0.25], depths = [0.2, 0.42, 0.7],
+  margins = [0.07, 0.15, 0.24], depths = [0.26, 0.54, 0.9],
 } = {}) {
-  const pos = [], nor = [], uv = [];
+  const pos = [], nor = [], uv = [], col = [];
+  let ao = 1; // baked ambient occlusion: deeper steps of the coffer are darker
   const P = (phi, al, r) => { const d = dirOf(phi, al); return [d[0] * r, cy + d[1] * r, d[2] * r]; };
   const eAl = (phi, al) => [-Math.sin(al) * Math.cos(phi), Math.cos(al), -Math.sin(al) * Math.sin(phi)];
   const ePh = (phi) => [-Math.sin(phi), 0, Math.cos(phi)];
 
   const tri = (a, b, c, na, nb, nc, ua, ub, uc) => {
-    pos.push(...a, ...b, ...c); nor.push(...na, ...nb, ...nc); uv.push(...ua, ...ub, ...uc);
+    pos.push(...a, ...b, ...c); nor.push(...na, ...nb, ...nc); uv.push(...ua, ...ub, ...uc); col.push(ao, ao, ao, ao, ao, ao, ao, ao, ao);
   };
   const UVf = (phi, al) => [phi * 3.2, al * 6];
 
@@ -231,11 +232,11 @@ export function buildCoffers({
       const o = { p0, p1, a0, a1 };
       const e0 = rect(margins[0]), e1 = rect(margins[1]), e2 = rect(margins[2]);
       const R0 = R, R1 = R + depths[0], R2 = R + depths[1], R3 = R + depths[2];
-      ring(o, e0, R0);
-      wall(e0, R0, R1); ring(e0, e1, R1);
-      wall(e1, R1, R2); ring(e1, e2, R2);
-      wall(e2, R2, R3);
-      patch(e2.p0, e2.p1, e2.a0, e2.a1, R3);
+      ao = 1.0; ring(o, e0, R0);
+      ao = 0.74; wall(e0, R0, R1); ao = 0.9; ring(e0, e1, R1);
+      ao = 0.62; wall(e1, R1, R2); ao = 0.78; ring(e1, e2, R2);
+      ao = 0.5; wall(e2, R2, R3);
+      ao = 0.6; patch(e2.p0, e2.p1, e2.a0, e2.a1, R3);
       rosettes.push({ phi: (p0 + p1) / 2, alpha: (a0 + a1) / 2, r: R3, size: Math.min((p1 - p0) * Math.cos((a0 + a1) / 2) * R * 0.2, (a1 - a0) * R * 0.2) });
     }
   }
@@ -243,6 +244,7 @@ export function buildCoffers({
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
   g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
   return { geometry: g, rosettes, P };
 }
 

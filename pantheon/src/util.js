@@ -54,7 +54,23 @@ export function fbm(u, v, period = 4, oct = 5, s = 0) {
 export function makeCanvas(w, h) {
   const c = document.createElement('canvas');
   c.width = w; c.height = h;
+  c.getContext('2d', { willReadFrequently: true }); // fixes the context attributes for the many getImageData passes
   return c;
 }
 
 export const hex = (r, g, b) => '#' + [r, g, b].map((v) => Math.round(clamp(v, 0, 255)).toString(16).padStart(2, '0')).join('');
+
+/** Tileable Worley (cellular) noise. Returns [f1, f2, id] for tile coords u,v in [0,1). */
+export function worley(u, v, period, seed = 0) {
+  const x = u * period, y = v * period, ix = Math.floor(x), iy = Math.floor(y);
+  let f1 = 9, f2 = 9, id = 0;
+  for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+    const gx = ix + dx, gy = iy + dy;
+    const cx = ((gx % period) + period) % period, cy = ((gy % period) + period) % period;
+    const px = gx + hash(cx, cy, seed), py = gy + hash(cx, cy, seed + 1);
+    const d = Math.hypot(x - px, y - py);
+    if (d < f1) { f2 = f1; f1 = d; id = hash(cx, cy, seed + 2); } else if (d < f2) f2 = d;
+  }
+  return [f1, f2, id];
+}
+export { hash as hash3 };

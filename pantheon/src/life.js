@@ -20,31 +20,36 @@ export class Crowd {
   constructor(scene, { outdoor = 190, indoor = 46 } = {}) {
     this.n = outdoor + indoor; this.nOut = outdoor;
     const rnd = (this.rnd = mulberry32(4242));
-    const mat = (c) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.85 });
-    const torsoG = new THREE.BoxGeometry(0.4, 0.58, 0.22); torsoG.translate(0, 1.13, 0);
-    const headG = new THREE.SphereGeometry(0.115, 10, 8); headG.translate(0, 1.58, 0);
-    const legG = new THREE.BoxGeometry(0.14, 0.84, 0.15); legG.translate(0, -0.42, 0);
-    const armG = new THREE.BoxGeometry(0.1, 0.56, 0.1); armG.translate(0, -0.26, 0);
+    const mat = (c) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.92 });
+    const torsoG = new THREE.CapsuleGeometry(0.2, 0.34, 4, 12); torsoG.scale(1, 1, 0.62); torsoG.translate(0, 1.14, 0);
+    const headG = new THREE.SphereGeometry(0.105, 14, 10); headG.translate(0, 1.575, 0);
+    const hairG = new THREE.SphereGeometry(0.114, 12, 8, 0, TAU, 0, Math.PI * 0.55); hairG.translate(0, 1.585, -0.01);
+    const legG = new THREE.CapsuleGeometry(0.078, 0.6, 3, 8); legG.translate(0, -0.4, 0);
+    const armG = new THREE.CapsuleGeometry(0.052, 0.4, 3, 8); armG.translate(0, -0.27, 0);
     const mk = (g, m, c) => { const im = new THREE.InstancedMesh(g, m, c); im.castShadow = true; im.receiveShadow = true; im.frustumCulled = false; scene.add(im); return im; };
     this.torso = mk(torsoG, mat(0xffffff), this.n);
     this.head = mk(headG, mat(0xffffff), this.n);
-    this.legs = mk(legG, mat(0x2b2f3a), this.n * 2);
+    this.hair = mk(hairG, mat(0xffffff), this.n);
+    this.legs = mk(legG, mat(0xffffff), this.n * 2);
     this.arms = mk(armG, mat(0xffffff), this.n * 2);
-    const cloth = ['#c9b79c', '#2f3b52', '#8a2f2f', '#e8e2d2', '#4b5d48', '#c2894a', '#3a3a3e', '#a6b7c9', '#d0a3a3', '#6c4a3a', '#f0c24b', '#7a8a9a'];
-    const skin = ['#f1c9a5', '#e0ac82', '#c68a62', '#8d5a3b', '#5b3a26', '#f6d8bd'];
+    // muted, lived-in palette (no primary colours)
+    const cloth = ['#3b3f4a', '#5b5348', '#7b7468', '#a39a86', '#2f3a3f', '#6d5a4a', '#8a7a66', '#4b5560', '#85604a', '#b4a890', '#596652', '#7a4a44', '#d0c8b8', '#47403a'];
+    const trouser = ['#2b2f3a', '#3a3328', '#5a5242', '#46505c', '#6a6254', '#252525'];
+    const skin = ['#e2b896', '#d09e78', '#b98162', '#8d5a3b', '#6a4630', '#ecc8a8'];
+    const hairC = ['#1c1814', '#3a2a1e', '#5a4430', '#8a7a68', '#b49a62', '#c8c4bc', '#2a2220'];
     this.P = [];
     for (let i = 0; i < this.n; i++) {
       const c = new THREE.Color(cloth[(rnd() * cloth.length) | 0]);
-      this.torso.setColorAt(i, c); this.arms.setColorAt(i * 2, c); this.arms.setColorAt(i * 2 + 1, c);
-      this.head.setColorAt(i, new THREE.Color(skin[(rnd() * skin.length) | 0]));
-      const legc = new THREE.Color(rnd() < 0.5 ? '#2b2f3a' : '#6b5b48'); this.legs.setColorAt(i * 2, legc); this.legs.setColorAt(i * 2 + 1, legc);
+      this.torso.setColorAt(i, c); this.arms.setColorAt(i * 2, c); this.arms.setColorAt(i * 2 + 1, rnd() < 0.3 ? new THREE.Color(skin[(rnd() * skin.length) | 0]) : c);
+      this.head.setColorAt(i, new THREE.Color(skin[(rnd() * skin.length) | 0])); this.hair.setColorAt(i, new THREE.Color(hairC[(rnd() * hairC.length) | 0]));
+      const legc = new THREE.Color(trouser[(rnd() * trouser.length) | 0]); this.legs.setColorAt(i * 2, legc); this.legs.setColorAt(i * 2 + 1, legc);
       const indoor = i >= outdoor;
-      const p = { x: 0, z: 0, yaw: rnd() * TAU, speed: 0.8 + rnd() * 0.7, phase: rnd() * TAU, wait: rnd() * 6, scale: 0.9 + rnd() * 0.18, zone: indoor ? 'in' : 'out', route: [], tx: 0, tz: 0, visitor: rnd() < 0.2, dwell: 20 + rnd() * 40, kid: rnd() < 0.08 };
-      if (p.kid) p.scale = 0.68;
+      const p = { x: 0, z: 0, yaw: rnd() * TAU, speed: 0.8 + rnd() * 0.6, phase: rnd() * TAU, wait: rnd() * 6, scale: 0.92 + rnd() * 0.14, zone: indoor ? 'in' : 'out', route: [], tx: 0, tz: 0, visitor: rnd() < 0.2, dwell: 20 + rnd() * 40, kid: rnd() < 0.08 };
+      if (p.kid) p.scale = 0.66;
       this.respawn(p);
       this.P.push(p);
     }
-    for (const m of [this.torso, this.head, this.legs, this.arms]) m.instanceColor.needsUpdate = true;
+    for (const m of [this.torso, this.head, this.hair, this.legs, this.arms]) m.instanceColor.needsUpdate = true;
     this.visibility = 1; this.indoorOpen = 1;
     this._m = new THREE.Matrix4(); this._q = new THREE.Quaternion(); this._qa = new THREE.Quaternion(); this._v = new THREE.Vector3(); this._s = new THREE.Vector3(); this._e = new THREE.Euler();
   }
@@ -75,7 +80,7 @@ export class Crowd {
     else p.route = [[0, -23.5], [0, -31], [0, -44.5], [(this.rnd() - 0.5) * 8, -50], [...this.randOut(this.rnd)]];
     p.zone = 'transit'; p.dwell = 25 + this.rnd() * 50;
   }
-  update(dt, t, night) {
+  update(dt, t, night, camPos) {
     const nOut = Math.floor(this.nOut * lerp(1, 0.28, night));
     const inOpen = night < 0.5 ? 1 : 0;
     const m = this._m, q = this._q, v = this._v, s = this._s, qa = this._qa, e = this._e;
@@ -107,11 +112,14 @@ export class Crowd {
       p.phase += sp * dt * 5.2;
       const swing = Math.sin(p.phase) * (sp > 0.05 ? 0.55 : 0.0);
       const y = groundY(p.x, p.z) + Math.abs(Math.sin(p.phase)) * 0.035 * (sp > 0.05 ? 1 : 0);
-      const sc = hidden ? 0.0001 : p.scale;
+      // keep personal space around the viewer
+      let near = false;
+      if (camPos) { const dx = p.x - camPos.x, dz = p.z - camPos.z, dd = Math.hypot(dx, dz); if (dd < 2.2 && Math.abs(camPos.y - y) < 4) { const push = (2.2 - dd) * 1.2 * dt; if (dd > 1e-3) { p.x += (dx / dd) * push; p.z += (dz / dd) * push; } near = dd < 0.8; } }
+      const sc = hidden || near ? 0.0001 : p.scale;
       // --- matrices
       q.setFromAxisAngle(v.set(0, 1, 0), p.yaw);
       s.set(sc, sc, sc); v.set(p.x, y, p.z);
-      m.compose(v, q, s); this.torso.setMatrixAt(i, m); this.head.setMatrixAt(i, m);
+      m.compose(v, q, s); this.torso.setMatrixAt(i, m); this.head.setMatrixAt(i, m); this.hair.setMatrixAt(i, m);
       for (let k = 0; k < 2; k++) {
         const sg = k ? 1 : -1;
         // legs pivot at the hip
@@ -124,7 +132,7 @@ export class Crowd {
         m.compose(v.set(p.x + off.x, y + off.y, p.z + off.z), qa, s); this.arms.setMatrixAt(i * 2 + k, m);
       }
     }
-    for (const mesh of [this.torso, this.head, this.legs, this.arms]) mesh.instanceMatrix.needsUpdate = true;
+    for (const mesh of [this.torso, this.head, this.hair, this.legs, this.arms]) mesh.instanceMatrix.needsUpdate = true;
   }
 }
 
@@ -223,14 +231,14 @@ export class DustMotes {
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(this.pos, 3)); g.setAttribute('aS', new THREE.BufferAttribute(new Float32Array(this.count).map(() => Math.random()), 1));
     this.mat = new THREE.ShaderMaterial({
       uniforms: { uA: { value: 0 }, uTime: { value: 0 }, uScale: { value: 1 } },
-      vertexShader: `attribute float aS; uniform float uTime; uniform float uScale; varying float vA; void main(){ vec4 mv = modelViewMatrix*vec4(position,1.0); gl_Position = projectionMatrix*mv; gl_PointSize = clamp((1.2 + aS*2.2) * uScale * (60.0/ -mv.z), 1.0, 6.0 * uScale); vA = 0.35 + 0.65*abs(sin(uTime*(0.6+aS*1.5)+aS*30.0)); }`,
+      vertexShader: `attribute float aS; uniform float uTime; uniform float uScale; varying float vA; void main(){ vec4 mv = modelViewMatrix*vec4(position,1.0); gl_Position = projectionMatrix*mv; gl_PointSize = clamp((0.9 + aS*1.3) * uScale * (40.0/ -mv.z), 1.0, 3.0 * uScale); vA = 0.35 + 0.65*abs(sin(uTime*(0.6+aS*1.5)+aS*30.0)); }`,
       fragmentShader: `uniform float uA; varying float vA; void main(){ vec2 d = gl_PointCoord-0.5; float a = smoothstep(0.5,0.0,length(d)); gl_FragColor = vec4(vec3(1.0,0.93,0.8)*2.0, a*vA*uA); }`,
       transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
     });
     this.points = new THREE.Points(g, this.mat); this.points.frustumCulled = false; this.points.renderOrder = 5; scene.add(this.points);
   }
   update(t, sunDir, intensity, landing) {
-    this.mat.uniforms.uTime.value = t; this.mat.uniforms.uA.value = clamp(intensity, 0, 1) * 0.55;
+    this.mat.uniforms.uTime.value = t; this.mat.uniforms.uA.value = clamp(intensity, 0, 1) * 0.18;
     this.points.visible = intensity > 0.02 && !!landing;
     if (!this.points.visible) return;
     const O = new THREE.Vector3(0, DIM.oculusY, 0), d = sunDir;

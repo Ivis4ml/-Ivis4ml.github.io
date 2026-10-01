@@ -3,6 +3,8 @@
 // Interior floor = y 0. Piazza pavement = y -0.6 (two steps down from the stylobate).
 import * as THREE from 'three';
 import * as T from './textures.js';
+import { applyDetail } from './detail.js';
+import { buildInterior } from './interior.js';
 import { merge, boxUV, boxAt, shaftGeometry, columnBase, corinthianCapital, buildCoffers, sphereArcProfile } from './geo.js';
 import { TAU, DEG, lerp, clamp } from './util.js';
 
@@ -30,60 +32,72 @@ export function buildPantheon({ floorRes = 4096 } = {}) {
   const emissiveNight = []; // materials that glow at night (none yet)
 
   // ---------------------------------------------------------------- textures & materials
+  // Everything is matte, grainy stone: roughness comes from baked maps (0.5 worn marble … 0.95 brick),
+  // never a mirror finish, and a world-space grain layer keeps close-ups from going smooth.
   const brick = T.brickTextures();
-  const trav = T.stoneTextures({ base: [214, 198, 160], dark: [160, 138, 100], blockW: 1.2, blockH: 0.6, tile: [4.8, 2.4], seed: 5 });
-  const marb = T.stoneTextures({ base: [232, 224, 204], dark: [196, 180, 150], blockW: 2.4, blockH: 1.2, tile: [4.8, 2.4], seed: 9, stains: 0.9 });
-  const paving = T.stoneTextures({ base: [206, 194, 168], dark: [150, 128, 100], blockW: 1.6, blockH: 1.6, tile: [3.2, 3.2], seed: 14, joint: 0.02 });
-  const graniteGrey = T.graniteTexture('grey'), graniteRed = T.graniteTexture('red');
+  const trav = T.stoneTextures({ base: [206, 192, 160], dark: [158, 136, 104], blockW: 1.2, blockH: 0.6, tile: [2.4, 1.2], seed: 5, crust: 0.3 });
+  const marb = T.stoneTextures({ base: [226, 218, 200], dark: [190, 172, 142], blockW: 1.2, blockH: 0.6, tile: [2.4, 1.2], seed: 9, stains: 0.6, pores: false, crust: 0.2, patina: [200, 168, 110] });
+  const paving = T.stoneTextures({ base: [196, 184, 160], dark: [150, 130, 102], blockW: 1.2, blockH: 1.2, tile: [2.4, 2.4], seed: 14, joint: 0.012, crust: 0.3 });
+  const granG = T.graniteTextures('grey'), granR = T.graniteTextures('red');
   const lead = T.leadTextures();
-  const drumTex = T.drumTexture();
   const doorTex = T.bronzeDoorTextures();
   const inscr = T.inscriptionTexture();
   const leafAlpha = T.acanthusAlpha();
 
+  const pbr = (t, o = {}) => {
+    const m = new THREE.MeshStandardMaterial({ map: t.map, normalMap: t.normal, roughnessMap: t.rough, roughness: 1, metalness: o.metal ?? 0, side: o.side ?? THREE.FrontSide });
+    m.normalScale.set(o.n ?? 1, o.n ?? 1); if (o.color) m.color.set(o.color);
+    if (o.detail !== false) applyDetail(m, o.detail || {});
+    return m;
+  };
+  const flat = (color, rough, o = {}) => { const m = new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: o.metal ?? 0, side: o.side ?? THREE.FrontSide, ...(o.extra || {}) }); applyDetail(m, o.detail || {}); return m; };
   const std = (o) => new THREE.MeshStandardMaterial(o);
   const M = {
-    brick: std({ map: brick.map, bumpMap: brick.bump, bumpScale: 2.5, roughness: 0.96 }),
-    drum: std({ map: drumTex, roughness: 0.95 }),
-    trav: std({ map: trav.map, bumpMap: trav.bump, bumpScale: 1.5, roughness: 0.9 }),
-    marb: std({ map: marb.map, bumpMap: marb.bump, bumpScale: 1.2, roughness: 0.78 }),
-    paving: std({ map: paving.map, bumpMap: paving.bump, bumpScale: 1, roughness: 0.55 }),
-    granite: std({ map: graniteGrey, roughness: 0.5, metalness: 0.0, color: 0xfff3e2 }),
-    graniteRed: std({ map: graniteRed, roughness: 0.5, color: 0xfff0e8 }),
-    cap: std({ color: 0xe9e1cc, roughness: 0.72 }),
-    capLeaf: std({ color: 0xe9e1cc, roughness: 0.72, alphaMap: leafAlpha, alphaTest: 0.5, side: THREE.DoubleSide }),
-    lead: std({ map: lead.map, bumpMap: lead.bump, bumpScale: 2, roughness: 0.62, metalness: 0.22, color: 0xe8e2d6 }),
-    bronze: std({ map: doorTex.map, bumpMap: doorTex.bump, bumpScale: 3, roughness: 0.45, metalness: 0.45, color: 0xf0d9a8 }),
-    bronzePlain: std({ color: 0x7a6334, roughness: 0.4, metalness: 0.9 }),
-    inscr: std({ map: inscr, roughness: 0.8 }),
+    brick: pbr(brick, { side: THREE.DoubleSide, detail: { s1: 1.7, s2: 18, albedo: 0.12, bump: 0.8, rough: 0.1, macro: 0.55 } }),
+    trav: pbr(trav, { side: THREE.DoubleSide, detail: { macro: 0.35 } }),
+    marb: pbr(marb, { side: THREE.DoubleSide, detail: { macro: 0.3 } }),
+    paving: pbr(paving, { detail: { macro: 0.3 } }),
+    granite: pbr(granG, { detail: { s1: 2.5, s2: 28, albedo: 0.08, bump: 0.55, rough: 0.12 } }),
+    graniteRed: pbr(granR, { detail: { s1: 2.5, s2: 28, albedo: 0.08, bump: 0.55, rough: 0.12 } }),
+    cap: flat(0xded6c2, 0.88),
+    capLeaf: flat(0xded6c2, 0.88, { side: THREE.DoubleSide, extra: { alphaMap: leafAlpha, alphaTest: 0.5 } }),
+    lead: pbr(lead, { metal: 0.0, side: THREE.DoubleSide, color: 0xf2eee4, detail: { s1: 1.2, s2: 12, albedo: 0.14, bump: 0.5, rough: 0.12, macro: 0.3 } }),
+    bronze: pbr(doorTex, { metal: 0.55, detail: false }),
+    bronzePlain: flat(0x5f5033, 0.58, { metal: 0.6 }),
+    inscr: std({ map: inscr, roughness: 0.92 }),
     dark: std({ color: 0x1b1713, roughness: 1 }),
   };
+  M.drum = M.brick;
   const inter = (m) => { interiorMaterials.push(m); return m; };
-  const floorTex = T.floorTextures(floorRes);
+  const floorT = T.floorTextures(floorRes);
+  const mt = (n) => T.marbleTextures(n);
+  const mtWhite = mt('white'), mtPav = mt('pavonazzetto'), mtGiallo = mt('giallo'), mtPor = T.marbleTextures('porphyry', 192), mtSerp = T.marbleTextures('serpentine', 192);
+  const rev = T.revetmentTextures();
+  const plasterWall = T.plasterTextures([222, 206, 176], 256, 2), plasterCoffer = T.plasterTextures([218, 204, 178], 256, 4);
+  const mini = { s1: 1.6, s2: 20, albedo: 0.07, bump: 0.45, rough: 0.12 };
   const I = {
-    floor: inter(new THREE.MeshPhysicalMaterial({ map: floorTex, roughness: 0.3, metalness: 0, clearcoat: 0.25, clearcoatRoughness: 0.3 })),
-    nicheFloor: inter(std({ map: T.marbleTexture('pavonazzetto'), roughness: 0.35 })),
-    wallMarble: inter(std({ map: T.marbleTexture('pavonazzetto'), color: 0xd9c9a8, roughness: 0.55, side: THREE.DoubleSide })),
-    pierMarble: inter(std({ map: T.marbleTexture('pavonazzetto'), roughness: 0.5, side: THREE.DoubleSide })),
+    floor: inter(pbr(floorT, { detail: { s1: 1.2, s2: 26, albedo: 0.05, bump: 0.5, rough: 0.14 } })),
+    nicheFloor: inter(pbr(mtPav, { detail: mini })),
+    wallMarble: inter(pbr(mtPav, { color: 0xe6d6b6, side: THREE.DoubleSide, detail: mini })),
+    pierMarble: inter(pbr(rev, { side: THREE.DoubleSide, detail: mini })),
     attic: null,
-    plaster: inter(std({ map: T.plasterTexture([222, 206, 176]), roughness: 0.95, side: THREE.DoubleSide })),
-    coffer: inter(std({ map: T.plasterTexture([226, 212, 184], 512, 4), roughness: 0.96, side: THREE.DoubleSide })),
-    giallo: inter(std({ map: T.marbleTexture('giallo'), roughness: 0.22, metalness: 0 })),
-    pavon: inter(std({ map: T.marbleTexture('pavonazzetto'), roughness: 0.22 })),
-    graniteI: inter(std({ map: graniteGrey, roughness: 0.3 })),
-    porphyry: inter(std({ map: T.marbleTexture('porphyry'), roughness: 0.25, side: THREE.DoubleSide })),
-    serp: inter(std({ map: T.marbleTexture('serpentine'), roughness: 0.25, side: THREE.DoubleSide })),
-    panel: inter(std({ map: T.marbleTexture('giallo'), color: 0xe8d8b8, roughness: 0.5, side: THREE.DoubleSide })),
-    white: inter(std({ map: T.marbleTexture('white'), roughness: 0.4, side: THREE.DoubleSide })),
-    gold: inter(std({ color: 0xc89a3a, roughness: 0.35, metalness: 0.9 })),
-    mosaic: inter(std({ map: T.goldMosaicTexture(), roughness: 0.4, metalness: 0.75, side: THREE.DoubleSide })),
-    capI: inter(std({ color: 0xe6dcc2, roughness: 0.6 })),
-    capLeafI: inter(std({ color: 0xe6dcc2, roughness: 0.6, alphaMap: leafAlpha, alphaTest: 0.5, side: THREE.DoubleSide })),
-    bronzeI: inter(std({ color: 0x7a6334, roughness: 0.4, metalness: 0.9 })),
+    plaster: inter(pbr(plasterWall, { side: THREE.DoubleSide })),
+    coffer: inter(pbr(plasterCoffer, { side: THREE.DoubleSide, detail: { s1: 1.4, s2: 16, albedo: 0.08, bump: 0.6, rough: 0.1 } })),
+    giallo: inter(pbr(mtGiallo, { detail: mini })),
+    pavon: inter(pbr(mtPav, { detail: mini })),
+    graniteI: inter(pbr(granG, { detail: { s1: 2.5, s2: 28, albedo: 0.08, bump: 0.55, rough: 0.12 } })),
+    porphyry: inter(pbr(mtPor, { side: THREE.DoubleSide, detail: mini })),
+    serp: inter(pbr(mtSerp, { side: THREE.DoubleSide, detail: mini })),
+    panel: inter(pbr(mtGiallo, { color: 0xe8d8b8, side: THREE.DoubleSide, detail: mini })),
+    white: inter(pbr(mtWhite, { side: THREE.DoubleSide, detail: mini })),
+    gold: inter(flat(0x8f7438, 0.5, { metal: 0.7 })),
+    mosaic: inter(std({ map: T.goldMosaicTexture(), roughness: 0.5, metalness: 0.5, side: THREE.DoubleSide })),
+    capI: inter(flat(0xdcd2bc, 0.82)),
+    capLeafI: inter(flat(0xdcd2bc, 0.82, { side: THREE.DoubleSide, extra: { alphaMap: leafAlpha, alphaTest: 0.5 } })),
+    bronzeI: inter(flat(0x5f5033, 0.55, { metal: 0.6 })),
   };
   const attic = T.atticTextures();
-  I.attic = inter(std({ map: attic.map, bumpMap: attic.bump, bumpScale: 3, roughness: 0.7, side: THREE.DoubleSide }));
-  [M.brick, M.trav, M.marb, M.paving, M.cap, M.capLeaf, M.lead, M.bronze, M.drum].forEach((m) => { m.userData.exterior = true; });
+  I.attic = inter(pbr(attic, { side: THREE.DoubleSide, detail: mini }));
 
   const add = (parent, geo, mat, { cast = true, receive = true, name = '' } = {}) => {
     const m = new THREE.Mesh(geo, mat);
@@ -98,7 +112,13 @@ export function buildPantheon({ floorRes = 4096 } = {}) {
   };
 
   // ---------------------------------------------------------------- shared column parts
-  const unitShaft = shaftGeometry(1, 0.9, 1, { rings: 20, entasis: 0.012, vScale: 2.2, uRepeat: 2 });
+  // Shafts are baked at their real 12 m height so the texture keeps its metric density (granite grain ≈ 0.6 m tile,
+  // veined marble ≈ 3 m); instances only scale Y by shaftH/12.
+  const SHAFT_H = 12;
+  const shaftGeos = {};
+  const shaftGeoFor = (key) => shaftGeos[key] || (shaftGeos[key] = (key === 'grey' || key === 'red')
+    ? shaftGeometry(1, 0.9, SHAFT_H, { rings: 24, entasis: 0.012, vScale: 0.6, uRepeat: 8 })
+    : shaftGeometry(1, 0.9, SHAFT_H, { rings: 24, entasis: 0.012, vScale: 3.2, uRepeat: 1.2 }));
   const unitBase = columnBase(0.74);
   const unitCap = corinthianCapital(0.666, 1.55);
   const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _p = new THREE.Vector3();
@@ -113,12 +133,12 @@ export function buildPantheon({ floorRes = 4096 } = {}) {
       const shaftH = s.h - baseH - capH;
       const key = s.mat;
       if (!groups.has(key)) groups.set(key, []);
-      groups.get(key).push(new THREE.Matrix4().compose(_p.set(s.x, s.y + baseH, s.z), _q.identity(), _s.set(s.r0, shaftH, s.r0)));
+      groups.get(key).push(new THREE.Matrix4().compose(_p.set(s.x, s.y + baseH, s.z), _q.identity(), _s.set(s.r0, shaftH / SHAFT_H, s.r0)));
       baseM.push(new THREE.Matrix4().compose(_p.set(s.x, s.y, s.z), _q.identity(), _s.set(k, k, k)));
       const ck = s.r0 * 0.9 / 0.666;
       capM.push(new THREE.Matrix4().compose(_p.set(s.x, s.y + baseH + shaftH, s.z), _q.identity(), _s.set(ck, ck, ck)));
     }
-    for (const [key, list] of groups) inst(parent, unitShaft, mats.shaft[key], list);
+    for (const [key, list] of groups) inst(parent, shaftGeoFor(key), mats.shaft[key], list);
     inst(parent, unitBase.geo, mats.cap, baseM);
     inst(parent, unitCap.body, mats.cap, capM);
     inst(parent, unitCap.leaves, mats.leaf, capM);
@@ -132,7 +152,12 @@ export function buildPantheon({ floorRes = 4096 } = {}) {
   // the drum is cut open on the north axis where the doorway passes through it
   const gapA = 0.1, th0 = Math.PI + gapA, thL = TAU - 2 * gapA;
   const drum = add(exterior, new THREE.CylinderGeometry(Ro, Ro, drumH, 160, 1, true, th0, thL), M.drum, { name: 'drum' });
-  drum.position.y = g0 + drumH / 2; drum.material.side = THREE.DoubleSide;
+  drum.position.y = g0 + drumH / 2;
+  { // tile the brick at real scale (2.5 m x 1.25 m) and add the relieving arches as a faint decal
+    const uv = drum.geometry.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * (Ro * thL) / 2.5, uv.getY(i) * drumH / 1.25);
+    const archMat = new THREE.MeshStandardMaterial({ map: T.drumArchDecal(), transparent: true, depthWrite: false, roughness: 1, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+    const arches = new THREE.Mesh(new THREE.CylinderGeometry(Ro + 0.02, Ro + 0.02, drumH, 160, 1, true, th0, thL), archMat); arches.position.y = drum.position.y; arches.receiveShadow = true; exterior.add(arches);
+  }
   // plinth skirt
   add(exterior, new THREE.CylinderGeometry(Ro + 0.5, Ro + 0.6, 1.4, 160, 1, true, th0, thL), M.trav, { name: 'drumPlinth' }).position.y = g0 + 0.2;
   // three cornices (travertine)
@@ -199,7 +224,7 @@ export function buildPantheon({ floorRes = 4096 } = {}) {
       m.rotation.z = -s * ang;
     }
     // cornice at the top of the block wall
-    add(exterior, boxAt(BW * 2 + 1.6, 0.9, 1.2, 0, top, wallZ + 0.1, 4.8, 2.4), M.trav);
+    add(exterior, boxAt(BW * 2 + 1.6, 0.9, 1.2, 0, top, wallZ + 0.1, 2.4, 1.2), M.trav);
   }
   // porch side walls (brick) + front-layer stone revetment with openings
   const sideX = 16.25;
@@ -215,10 +240,10 @@ export function buildPantheon({ floorRes = 4096 } = {}) {
     for (let i = 0; i < xs.length - 1; i++) {
       const x0 = xs[i], x1 = xs[i + 1], w = x1 - x0; if (w < 0.01) continue;
       const op = ops.find((o) => Math.abs(o.x0 - x0) < 1e-4 && Math.abs(o.x1 - x1) < 1e-4);
-      if (!op) add(exterior, boxAt(w, H, t, (x0 + x1) / 2, H / 2, z, 4.8, 2.4), M.trav);
+      if (!op) add(exterior, boxAt(w, H, t, (x0 + x1) / 2, H / 2, z, 2.4, 1.2), M.trav);
       else {
-        if (op.y0 > 0.001) add(exterior, boxAt(w, op.y0, t, (x0 + x1) / 2, op.y0 / 2, z, 4.8, 2.4), M.trav);
-        add(exterior, boxAt(w, H - op.y1, t, (x0 + x1) / 2, op.y1 + (H - op.y1) / 2, z, 4.8, 2.4), M.trav);
+        if (op.y0 > 0.001) add(exterior, boxAt(w, op.y0, t, (x0 + x1) / 2, op.y0 / 2, z, 2.4, 1.2), M.trav);
+        add(exterior, boxAt(w, H - op.y1, t, (x0 + x1) / 2, op.y1 + (H - op.y1) / 2, z, 2.4, 1.2), M.trav);
       }
     }
     // niche interiors: recessed back + dark
@@ -232,8 +257,8 @@ export function buildPantheon({ floorRes = 4096 } = {}) {
     }
     // door frame (marble jambs + monolithic lintel + cornice)
     for (const s of [-1, 1]) add(exterior, boxAt(0.5, door.h + 0.4, 0.7, s * (door.w + 0.25), (door.h + 0.4) / 2, wallZ + 0.1, 2.4, 2.4), M.marb);
-    add(exterior, boxAt(2 * door.w + 1.6, 0.7, 0.9, 0, door.h + 0.35, wallZ + 0.1, 4.8, 2.4), M.marb);
-    add(exterior, boxAt(2 * door.w + 2.2, 0.35, 1.2, 0, door.h + 0.9, wallZ + 0.0, 4.8, 2.4), M.marb);
+    add(exterior, boxAt(2 * door.w + 1.6, 0.7, 0.9, 0, door.h + 0.35, wallZ + 0.1, 2.4, 1.2), M.marb);
+    add(exterior, boxAt(2 * door.w + 2.2, 0.35, 1.2, 0, door.h + 0.9, wallZ + 0.0, 2.4, 1.2), M.marb);
     // bronze grille above the leaves
     const bars = []; const bz = wallZ + t - 0.3;
     for (let i = -8; i <= 8; i++) bars.push(boxAt(0.08, door.h - 6.8, 0.12, i * (door.w * 2 / 17), 6.8 + (door.h - 6.8) / 2, bz, 1, 1));
@@ -256,8 +281,8 @@ export function buildPantheon({ floorRes = 4096 } = {}) {
   // ---- portico ------------------------------------------------------------------------
   const pz = DIM.porticoZ, xs = DIM.colXs;
   // stylobate and two steps down to the piazza (ground y = -0.6)
-  add(exterior, boxUV(2 * 17.9, 1.2, 17.4, 3.2, 3.2), M.paving, { name: 'stylobate' }).position.set(0, -0.6, -36.2);
-  add(exterior, boxUV(2 * 18.6, 0.3, 1.5, 3.2, 3.2), M.trav, { name: 'step' }).position.set(0, -0.45, -45.65);
+  add(exterior, boxUV(2 * 17.9, 1.2, 17.4, 2.4, 2.4), M.paving, { name: 'stylobate' }).position.set(0, -0.6, -36.2);
+  add(exterior, boxUV(2 * 18.6, 0.3, 1.5, 2.4, 2.4), M.trav, { name: 'step' }).position.set(0, -0.45, -45.65);
   // porch floor surface (receives shadows nicely) is the stylobate top. Ceiling:
   add(exterior, boxAt(2 * 17.2, 0.4, 14.9, 0, DIM.entY + 0.2, (pz + wallZ) / 2 + 0.2 - 0.3, 3, 3), M.trav, { name: 'porchCeiling' });
 
@@ -286,8 +311,8 @@ export function buildPantheon({ floorRes = 4096 } = {}) {
       const depth = L.out + 0.9; // from 0.9 behind the axis line to `out` in front
       const mid = (L.out - 0.9) / 2;
       let g;
-      if (axis === 'x') { g = boxUV(len + 2 * L.out, L.h, depth, 4.8, 2.4); g.translate(cx, eY + L.y + L.h / 2, cz - mid); }
-      else { g = boxUV(depth, L.h, len, 4.8, 2.4); g.translate(cx + sign * mid, eY + L.y + L.h / 2, cz); }
+      if (axis === 'x') { g = boxUV(len + 2 * L.out, L.h, depth, 2.4, 1.2); g.translate(cx, eY + L.y + L.h / 2, cz - mid); }
+      else { g = boxUV(depth, L.h, len, 2.4, 1.2); g.translate(cx + sign * mid, eY + L.y + L.h / 2, cz); }
       add(exterior, g, L.mat);
     }
   };
@@ -323,7 +348,7 @@ export function buildPantheon({ floorRes = 4096 } = {}) {
         [0.0, 0.26, 0.5], [0.26, 0.5, 1.1], [0.76, 0.3, 1.18],
       ];
       for (const [yo, h, out] of parts) {
-        const gg = boxUV(len, h, out + 0.4, 4.8, 2.4); gg.translate(0, yo + h / 2, -(out - 0.4) / 2 - 0.0);
+        const gg = boxUV(len, h, out + 0.4, 2.4, 1.2); gg.translate(0, yo + h / 2, -(out - 0.4) / 2 - 0.0);
         add(grp, gg, M.marb);
       }
       grp.position.set(s * half / 2, topY + rise / 2, pz - 0.7);
@@ -343,187 +368,8 @@ export function buildPantheon({ floorRes = 4096 } = {}) {
     add(exterior, new THREE.BoxGeometry(0.7, 0.4, 15.6), M.lead).position.set(0, topY + rise + 0.45, (pz + wallZ) / 2 - 0.4);
   }
 
-  // ================================================================ INTERIOR ================================================================
-  // ---- floor (slightly convex dish) ---------------------------------------------------
-  {
-    const rad = 96, ang = 192;
-    const pos = [], uv = [], idx = [];
-    for (let i = 0; i <= rad; i++) {
-      const r = (i / rad) * (R + 0.4);
-      for (let j = 0; j <= ang; j++) {
-        const a = (j / ang) * TAU;
-        const x = Math.sin(a) * r, z = -Math.cos(a) * r;
-        const y = 0.3 * Math.max(0, 1 - (r / R) ** 2);
-        pos.push(x, y, z); uv.push((x + R) / (2 * R), 1 - (z + R) / (2 * R));
-      }
-    }
-    for (let i = 0; i < rad; i++) for (let j = 0; j < ang; j++) {
-      const a = i * (ang + 1) + j, b = a + 1, c = a + ang + 1, d = c + 1;
-      idx.push(a, b, d, a, d, c);
-    }
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-    g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
-    g.setIndex(idx); g.computeVertexNormals();
-    add(interior, g, I.floor, { cast: false, name: 'floor' });
-    // central drain rosette + oculus-fall ring: small bronze grating
-    const drain = new THREE.CircleGeometry(0.45, 24); drain.rotateX(-Math.PI / 2); drain.translate(0, 0.305, 0);
-    add(interior, drain, I.bronzeI, { cast: false });
-  }
-
-  // ---- lower order: piers, niches, entablature ----------------------------------------
-  const hw = 4.1, beta = Math.asin(hw / R);
-  const yEnt = 8.2;
-  for (let k = 0; k < 8; k++) {
-    const a = k * 45 * DEG + beta, b = (k + 1) * 45 * DEG - beta;
-    const g = new THREE.CylinderGeometry(R, R, yEnt + 0.8, 16, 1, true, Math.PI - b, b - a);
-    const uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * 4, uv.getY(i) * 2);
-    const m = add(interior, g, I.pierMarble, { cast: false }); m.position.y = (yEnt + 0.8) / 2 - 0.0; m.material.side = THREE.DoubleSide;
-  }
-  const bayFrame = (theta, r = R) => {
-    const g = new THREE.Group();
-    g.position.set(r * Math.sin(theta), 0, -r * Math.cos(theta)); g.rotation.y = Math.PI - theta; interior.add(g); return g;
-  };
-  const z0 = -(R - Math.sqrt(R * R - hw * hw)); // chord inset ≈ -0.39
-  const topNiche = 8.9;
-  const plane = (w, h, mat, x, y, z, ry = 0, rx = 0) => {
-    const g = new THREE.PlaneGeometry(w, h); const m = new THREE.Mesh(g, mat);
-    m.position.set(x, y, z); m.rotation.set(rx, ry, 0); m.receiveShadow = true; return m;
-  };
-  const types = ['door', 'semi', 'rect', 'semi', 'apse', 'semi', 'rect', 'semi'];
-  const nicheCols = [];
-  types.forEach((type, k) => {
-    const th = k * 45 * DEG;
-    const f = bayFrame(th);
-    if (type === 'semi' || type === 'apse') {
-      const rn = hw; const apse = type === 'apse';
-      const cg = new THREE.CylinderGeometry(rn, rn, topNiche, 32, 1, true, -Math.PI / 2, Math.PI);
-      const cm = new THREE.Mesh(cg, I.wallMarble); cm.position.set(0, topNiche / 2, z0); cm.receiveShadow = true; f.add(cm);
-      const dome = new THREE.SphereGeometry(rn, 32, 12, 0, Math.PI, 0, Math.PI / 2);
-      const dm = new THREE.Mesh(dome, apse ? I.mosaic : I.plaster); dm.scale.y = 0.28; dm.position.set(0, topNiche, z0); dm.receiveShadow = true; f.add(dm);
-      const fl = new THREE.CircleGeometry(rn, 32, Math.PI, Math.PI); fl.rotateX(-Math.PI / 2); fl.translate(0, 0.005, z0);
-      const fm = new THREE.Mesh(fl, I.nicheFloor); fm.receiveShadow = true; f.add(fm);
-      if (apse) { // altar, cross and a gilt frame
-        const altar = new THREE.Mesh(boxUV(2.4, 1.0, 1.0, 1.2, 1.2), I.white); altar.position.set(0, 0.5, z0 + 2.4); altar.castShadow = true; altar.receiveShadow = true; f.add(altar);
-        const cross = new THREE.Group();
-        const v = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.2, 0.1), I.gold); v.position.y = 1.65; const hz = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.1, 0.1), I.gold); hz.position.y = 1.95;
-        cross.add(v, hz); cross.position.set(0, 0, z0 + 2.4); f.add(cross);
-        const base = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.2, 1.4), I.white); base.position.set(0, 0.1, z0 + 2.4); f.add(base);
-      }
-    } else {
-      const depth = type === 'door' ? 1.7 : 4.6;
-      const zb = z0 + depth;
-      f.add(plane(depth, topNiche, I.wallMarble, -hw, topNiche / 2, z0 + depth / 2, Math.PI / 2));
-      f.add(plane(depth, topNiche, I.wallMarble, hw, topNiche / 2, z0 + depth / 2, -Math.PI / 2));
-      f.add(plane(2 * hw, depth, I.plaster, 0, topNiche, z0 + depth / 2, 0, Math.PI / 2));
-      const fm = plane(2 * hw, depth, I.nicheFloor, 0, 0.005, z0 + depth / 2, 0, -Math.PI / 2); f.add(fm);
-      if (type === 'rect') f.add(plane(2 * hw, topNiche, I.wallMarble, 0, topNiche / 2, zb, Math.PI));
-      else { // entrance recess: back wall with the doorway cut out
-        const bw = (2 * hw - 2 * door.w) / 2;
-        for (const s of [-1, 1]) f.add(plane(bw, topNiche, I.wallMarble, s * (door.w + bw / 2), topNiche / 2, zb, Math.PI));
-        f.add(plane(2 * door.w, topNiche - door.h, I.wallMarble, 0, door.h + (topNiche - door.h) / 2, zb, Math.PI));
-      }
-    }
-    // two columns at the mouth
-    const cx = 3.45, cz = z0 + 0.45;
-    for (const s of [-1, 1]) {
-      const p = new THREE.Vector3(s * cx, 0, cz).applyEuler(new THREE.Euler(0, f.rotation.y, 0)).add(f.position);
-      nicheCols.push({ x: p.x, y: 0, z: p.z, r0: 0.42, h: yEnt, mat: k % 3 === 0 ? 'pavon' : 'giallo' });
-    }
-  });
-  // door tunnel through the thick wall: marble lined (world coords)
-  {
-    const zin = -(R + 1.7 - 0.39), zout = wallZ + 1.5; // inner recess back (-23.0) to front layer (-27.5)
-    const len = zin - zout;
-    const cz = (zin + zout) / 2;
-    for (const s of [-1, 1]) add(interior, boxUV(0.2, door.h, len, 2, 2), I.wallMarble, { cast: true }).position.set(s * (door.w + 0.1), door.h / 2, cz);
-    add(interior, boxUV(2 * door.w + 0.4, 0.3, len, 2, 2), I.wallMarble).position.set(0, door.h + 0.15, cz);
-    const fl = new THREE.Mesh(boxUV(2 * door.w + 0.4, 0.2, len + 1.8, 2, 2), I.nicheFloor); fl.position.set(0, -0.08, cz - 0.9); fl.receiveShadow = true; interior.add(fl);
-    // threshold stone (single block)
-    add(interior, boxUV(2 * door.w, 0.12, 0.9, 2, 2), I.white).position.set(0, 0.06, wallZ + 1.0);
-  }
-
-  // niche columns, aedicule columns (instanced)
-  const aedCols = [];
-  const aedicules = [];
-  for (let k = 0; k < 8; k++) {
-    const th = (k * 45 + 22.5) * DEG;
-    const f = bayFrame(th, R - 0.02);
-    // pier back panel (framed in white marble)
-    const panel = new THREE.Mesh(new THREE.PlaneGeometry(5.8, 7.6), I.panel); panel.position.set(0, 3.9, -0.03); panel.rotation.y = Math.PI; f.add(panel);
-    const frame = new THREE.Mesh(new THREE.PlaneGeometry(6.1, 7.9), I.white); frame.position.set(0, 3.95, -0.015); frame.rotation.y = Math.PI; f.add(frame);
-    const ax = 1.85, az = -1.15;
-    for (const s of [-1, 1]) {
-      const p = new THREE.Vector3(s * ax, 0, az).applyEuler(new THREE.Euler(0, f.rotation.y, 0)).add(f.position);
-      aedCols.push({ x: p.x, y: 0, z: p.z, r0: 0.33, h: 6.4, mat: k % 2 ? 'grey' : 'pavon' });
-    }
-    // entablature + pediment
-    const eg = new THREE.Mesh(boxUV(5.2, 0.8, 1.6, 2, 2), I.white); eg.position.set(0, 6.4 + 0.4, az + 0.35); eg.castShadow = true; eg.receiveShadow = true; f.add(eg);
-    const ped = k % 2 === 0
-      ? (() => { const sh = new THREE.Shape([new THREE.Vector2(-2.7, 0), new THREE.Vector2(2.7, 0), new THREE.Vector2(0, 1.15)]); return new THREE.ExtrudeGeometry(sh, { depth: 0.5, bevelEnabled: false }); })()
-      : (() => { const sh = new THREE.Shape(); sh.moveTo(-2.7, 0); sh.lineTo(2.7, 0); sh.absarc(0, 0, 2.7, 0, Math.PI, false); const g = new THREE.ExtrudeGeometry(sh, { depth: 0.5, bevelEnabled: false, curveSegments: 20 }); g.scale(1, 0.42, 1); return g; })();
-    const pm = new THREE.Mesh(ped, I.white); pm.position.set(0, 7.2, az + 0.35 - 0.25); pm.castShadow = true; f.add(pm);
-    // door/sarcophagus ground-level niche in each pier (dark inset reads as depth)
-    const inset = new THREE.Mesh(new THREE.PlaneGeometry(2.9, 4.6), k % 2 ? I.porphyry : I.serp); inset.position.set(0, 3.1, -0.05); inset.rotation.y = Math.PI; f.add(inset);
-    const inFr = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 4.9), I.white); inFr.position.set(0, 3.1, -0.04); inFr.rotation.y = Math.PI; f.add(inFr);
-  }
-  columns(interior, [...nicheCols, ...aedCols], {
-    shaft: { giallo: I.giallo, pavon: I.pavon, grey: I.graniteI }, cap: I.capI, leaf: I.capLeafI,
-  });
-
-  // entablature ring around the whole lower order (architrave / frieze / cornice) -------
-  {
-    const ringLathe = (pts, mat, name) => {
-      const g = new THREE.LatheGeometry(pts.map((p) => new THREE.Vector2(p[0], p[1])), 160);
-      const uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * 40, uv.getY(i) * 1);
-      const m = add(interior, g, mat, { cast: false, name }); m.material.side = THREE.DoubleSide; return m;
-    };
-    ringLathe([[R + 0.1, 8.2], [R - 0.25, 8.2], [R - 0.25, 8.7], [R + 0.1, 8.7]], I.white, 'architrave');
-    ringLathe([[R + 0.1, 8.7], [R - 0.12, 8.7], [R - 0.12, 9.12], [R + 0.1, 9.12]], I.pierMarble, 'frieze');
-    ringLathe([[R + 0.1, 9.12], [R - 0.3, 9.12], [R - 0.3, 9.3], [R - 0.62, 9.34], [R - 0.62, 9.62], [R - 0.38, 9.7], [R + 0.1, 9.7]], I.white, 'cornice');
-    // attic pilaster base course
-    ringLathe([[R + 0.1, 9.7], [R - 0.1, 9.7], [R - 0.1, 9.95], [R + 0.1, 9.95]], I.white, 'atticBase');
-    // upper attic cornice
-    ringLathe([[R + 0.1, 17.4], [R - 0.2, 17.4], [R - 0.2, 17.65], [R - 0.62, 17.7], [R - 0.62, 18.1], [R - 0.3, 18.2], [R + 0.1, 18.2]], I.white, 'atticCornice');
-    // springing cornice at the base of the dome (dentiled)
-    ringLathe([[R + 0.1, 21.0], [R - 0.3, 21.0], [R - 0.3, 21.2], [R - 0.8, 21.25], [R - 0.8, 21.6], [R - 0.45, 21.7], [R + 0.1, 21.7]], I.white, 'springCornice');
-  }
-  // attic wall (14 blind windows between pilasters) 9.95 -> 17.4
-  {
-    const g = new THREE.CylinderGeometry(R, R, 17.4 - 9.95, 128, 1, true);
-    const m = add(interior, g, I.attic, { cast: false, name: 'attic' }); m.position.y = (17.4 + 9.95) / 2; m.material.side = THREE.DoubleSide;
-  }
-  // plain band to the dome springing line
-  {
-    const g = new THREE.CylinderGeometry(R, R, 21.0 - 18.2, 96, 1, true);
-    const uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * 12, uv.getY(i) * 1);
-    add(interior, g, I.plaster, { cast: false }).position.y = (21.0 + 18.2) / 2;
-    const g2 = new THREE.CylinderGeometry(R, R, 21.7 - 21.0, 96, 1, true); add(interior, g2, I.plaster, { cast: false }).position.y = (21.0 + 21.7) / 2;
-  }
-
-  // ---- dome: belt + 5 rows x 28 coffers + oculus band ----------------------------------
-  const rosettePts = [];
-  {
-    const cy = 21.65;
-    const belt = new THREE.LatheGeometry(sphereArcProfile(R, cy, 0, 12, 8), 128);
-    const buv = belt.attributes.uv; for (let i = 0; i < buv.count; i++) buv.setXY(i, buv.getX(i) * 12, buv.getY(i) * 1);
-    add(interior, belt, I.plaster, { cast: false, name: 'domeBelt' }).material.side = THREE.DoubleSide;
-    const aOc = Math.acos(DIM.oculusR / R) / DEG;
-    const top = new THREE.LatheGeometry(sphereArcProfile(R, cy, 72, aOc, 16), 128);
-    add(interior, top, I.plaster, { cast: false, name: 'domeTop' }).material.side = THREE.DoubleSide;
-    const { geometry, rosettes } = buildCoffers({ R, cy });
-    add(interior, geometry, I.coffer, { cast: true, name: 'coffers' });
-    // gilt bronze rosettes
-    const rg = new THREE.SphereGeometry(1, 12, 6, 0, TAU, 0, Math.PI / 2);
-    const mats = rosettes.map((r) => {
-      const d = [Math.cos(r.alpha) * Math.cos(r.phi), Math.sin(r.alpha), Math.cos(r.alpha) * Math.sin(r.phi)];
-      const pos = new THREE.Vector3(d[0] * (r.r - 0.02), cy + d[1] * (r.r - 0.02), d[2] * (r.r - 0.02));
-      const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(-d[0], -d[1], -d[2]));
-      const s = r.size * 0.42;
-      return new THREE.Matrix4().compose(pos, q, new THREE.Vector3(s, s * 0.35, s));
-    });
-    inst(interior, rg, I.gold, mats, { cast: false });
-  }
+  // ================================================================ INTERIOR (see interior.js) ================================================================
+  buildInterior({ I, interior, add, inst, columns, unitCap, door, wallZ, DIM, R });
 
   return {
     group, exterior, interior, interiorMaterials, M, I,
@@ -595,7 +441,7 @@ export class InteriorLight {
 
     // bake env if lighting changed noticeably
     if (Math.abs(this.lastBake.d - day) > 0.02 || Math.abs(this.lastBake.n - night) > 0.02 || !this.rt) {
-      this.shell.material.color.setScalar(lerp(0.012, 0.72, day));
+      this.shell.material.color.setScalar(lerp(0.012, 0.5, day));
       this.disc.material.color.setRGB(lerp(0.15, 7.0, day), lerp(0.2, 8.0, day), lerp(0.32, 10.0, day));
       const rt = this.pmrem.fromScene(this.scene, 0.01, 0.1, 200);
       if (this.rt) this.rt.dispose();
@@ -605,8 +451,8 @@ export class InteriorLight {
     for (const m of this.pan.interiorMaterials) m.envMapIntensity = 1.0;
 
     // static fills (soft skylight spreading across the rotunda)
-    this.fill.intensity = 14 * day + 0.5 * night;
-    this.fillHi.intensity = 14 * day;
+    this.fill.intensity = 6 * day + 0.4 * night;
+    this.fillHi.intensity = 5 * day;
     // bounce light from the sunbeam patch
     if (hit && beamStrength > 0.02) {
       const n = hit.clone(); n.y = clamp(n.y, 0.5, 40);
