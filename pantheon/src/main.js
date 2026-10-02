@@ -135,9 +135,12 @@ function hideHint() { clearTimeout(hintTimer); $('#hint').classList.remove('on')
 const seen = {}; let tInside = 0, clicked = false;
 function onRigEvent(ev) { if (ev === 'click') { clicked = true; if (hintCur.startsWith('拖动')) hideHint(); } syncUI(); }
 function updateHints(dt, t) {
-  if (SHOT || rig.mode !== 'walk') { tInside = 0; return; }
+  if (SHOT) return;
+  if (rig.mode === 'orbit' && !seen.orbit) { seen.orbit = 1; showHint(isTouch ? '拖动环绕 · 双指缩放 · 双击地面落地' : '拖动环绕 · 右键拖动平移 · 滚轮缩放 · 双击地面落地', 7000); }
+  if (rig.mode === 'free' && !seen.free) { seen.free = 1; showHint(isTouch ? '拖动转向 · 摇杆移动 · 双击地面落地' : 'WASD 移动 · Q/E 升降 · 拖动转向 · 滚轮前进 · Shift 加速 · 双击落地', 8000); }
+  if (rig.mode !== 'walk') { tInside = 0; return; }
   const p = camera.position, ins = state.inside > 0.7;
-  if (!seen.look && t > 1.5) { seen.look = 1; showHint(isTouch ? '拖动环顾 · 点按地面走过去' : '拖动环顾 · 点击地面走过去 · 滚轮拉近', 9000); }
+  if (!seen.look && t > 1.5) { seen.look = 1; showHint(isTouch ? '拖动环顾 · 点按地面走过去' : '拖动环顾 · 点击地面走过去 · 滚轮前进', 9000); }
   else if (seen.look === 1 && (clicked || t > 14)) seen.look = 2;
   if (!seen.enter && seen.look === 2 && !ins && p.z > -90 && p.z < -52 && Math.abs(p.x) < 26) { seen.enter = 1; showHint('柱廊后面就是大门，走进去', 6000); }
   if (ins) {
@@ -166,7 +169,9 @@ function wireUI() {
   for (const [k, s] of Object.entries(SPOTS)) { const b = document.createElement('button'); b.textContent = s.label; b.dataset.spot = k; spots.appendChild(b); }
   const closePop = () => { $('#pop').classList.remove('on'); $('#bMore').classList.remove('on'); };
   spots.addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; rig.goSpot(b.dataset.spot); closePop(); });
-  $('#bBird').addEventListener('click', () => { if (rig.mode === 'orbit') rig.goSpot('piazza'); else rig.ascend(); setTimeout(syncUI, 60); });
+  const setMode = (m) => { rig.setMode(m); syncUI(); };
+  $('#modes').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) setMode(b.dataset.mode); });
+  addEventListener('keydown', (e) => { if (e.target && /INPUT|SELECT|TEXTAREA/.test(e.target.tagName)) return; const m = { Digit1: 'walk', Digit2: 'orbit', Digit3: 'free' }[e.code]; if (m) setMode(m); });
   $('#bMore').addEventListener('click', () => { $('#pop').classList.toggle('on'); $('#bMore').classList.toggle('on'); });
   $('#qsel').value = qname; $('#qsel').addEventListener('change', (e) => { const u = new URL(location.href); u.searchParams.set('q', e.target.value); location.href = u.toString(); });
   $('#bSound').addEventListener('click', async () => { const on = await audio.toggle(); $('#bSound').classList.toggle('on', on); });
@@ -187,7 +192,8 @@ function wireUI() {
 }
 function syncUI() {
   document.querySelectorAll('#weather button').forEach((b) => b.classList.toggle('on', b.dataset.w === state.weather));
-  $('#bBird').textContent = rig.mode === 'orbit' ? '回到地面' : '鸟瞰';
+  const cur = rig.mode === 'flight' ? (rig.flight && rig.flight.dest) || rig.mode : rig.mode;
+  document.querySelectorAll('#modes button').forEach((b) => b.classList.toggle('on', b.dataset.mode === cur));
   canvas.classList.toggle('walking', rig.mode === 'walk');
 }
 function dirName(x, z) { const a = (Math.atan2(x, -z) / DEG + 360) % 360; return ['北', '东北', '东', '东南', '南', '西南', '西', '西北'][Math.round(a / 45) % 8]; }

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>万神殿 Pantheon</title>
-<meta name="description" content="1:1 程序化重建的罗马万神殿与帕拉佐·罗通达广场：拖动环顾，点击地面走近。">
+<meta name="description" content="1:1 程序化重建的罗马万神殿与帕拉佐·罗通达广场：拖动环顾，点击地面走近；也可环绕或自由飞行。">
 <meta name="theme-color" content="#111">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M2 13h28L16 4z M5 14h3v11H5z M10 14h3v11h-3z M15 14h3v11h-3z M20 14h3v11h-3z M25 14h3v11h-3z M2 26h28v3H2z' fill='%23c9c2b4'/%3E%3C/svg%3E">
 <style>
@@ -38,6 +38,8 @@
   #menu { position:fixed; right:12px; top:10px; z-index:7; display:flex; gap:6px; align-items:flex-start; }
   #menu > button { padding:5px 10px; }
   #menu > button:hover, #menu > button.on { background:rgba(255,255,255,.12); }
+  #modes { display:flex; overflow:hidden; } #modes button { padding:5px 10px; } #modes button + button { border-left:1px solid var(--line); }
+  #modes button:hover { background:rgba(255,255,255,.08); } #modes button.on { background:rgba(255,255,255,.2); }
   #pop { position:fixed; right:12px; top:46px; z-index:7; width:min(260px,calc(100vw - 24px)); padding:12px 14px; display:none; flex-direction:column; gap:12px; }
   #pop.on { display:flex; }
   #pop h4 { margin:0 0 6px; font-weight:500; color:var(--dim); font-size:12px; }
@@ -74,7 +76,9 @@
 </div>
 
 <div id="menu">
-  <button id="bBird" class="chip" title="从空中俯瞰">鸟瞰</button>
+  <div id="modes" class="chip" role="group" aria-label="视角">
+    <button data-mode="walk" title="站在地面，点击走动（1）">步行</button><button data-mode="orbit" title="围绕建筑旋转、缩放（2）">环绕</button><button data-mode="free" title="自由飞行：WASD 移动，Q/E 升降（3）">自由</button>
+  </div>
   <button id="bMore" class="chip" title="更多">设置</button>
 </div>
 <div id="pop" class="chip">
