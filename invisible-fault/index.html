@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>看不见的故障</title>
+<meta name="description" content="横线笔记本上的逐帧铅笔动画：一次训练事故、一行被改的底层库、一座总出现在背景里的城市。据公开报道与各方陈述改编，人物为示意。">
+<meta name="theme-color" content="#1c1a17">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='4' y='3' width='24' height='26' rx='2' fill='%23f3efe4'/%3E%3Cpath d='M8 10h16M8 15h16M8 20h16M8 25h10' stroke='%2370a0ce' stroke-width='1.2'/%3E%3Cpath d='M9 21l5-3 3 2 5-9' stroke='%23c03e38' stroke-width='2' fill='none'/%3E%3C/svg%3E">
+<style>
+@font-face { font-family: NBNote; src: url(fonts/NBNote.woff2) format('woff2'); font-display: block; }
+@font-face { font-family: NBHer; src: url(fonts/NBHer.woff2) format('woff2'); font-display: block; }
+@font-face { font-family: NBHim; src: url(fonts/NBHim.woff2) format('woff2'); font-display: block; }
+:root {
+  --bg: #1c1a17;
+  --ink: #e9e3d6;
+  --muted: #a49c8d;
+  --line: #3a362f;
+  --accent: #d0574e;
+  --paper: #f3efe4;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--ink); }
+body { font: 15px/1.6 "NBNote", "PingFang SC", "Noto Sans SC", system-ui, sans-serif; min-height: 100vh; }
+main { max-width: 1280px; margin: 0 auto; padding: 20px 16px 40px; }
+header { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin: 4px 2px 14px; }
+h1 { font: 400 30px/1.2 "NBHer", serif; margin: 0; letter-spacing: .04em; }
+h1 b { font-weight: 400; color: var(--accent); }
+header p { margin: 0; color: var(--muted); font-size: 14px; }
+.stage { position: relative; width: 100%; aspect-ratio: 16 / 9; background: var(--paper); border-radius: 3px; overflow: hidden;
+  box-shadow: 0 1px 0 rgba(255,255,255,.04), 0 18px 50px rgba(0,0,0,.45); cursor: pointer; }
+.stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.stage .loading { position: absolute; inset: 0; display: grid; place-items: center; color: #6b665c; font: 22px "NBHer", serif; background: var(--paper); transition: opacity .4s; }
+.stage .loading.gone { opacity: 0; pointer-events: none; }
+.stage .big { position: absolute; left: 50%; top: 50%; width: 76px; height: 76px; margin: -38px 0 0 -38px; border-radius: 50%;
+  background: rgba(28,26,23,.72); display: grid; place-items: center; transition: opacity .25s; pointer-events: none; }
+.stage .big svg { width: 30px; height: 30px; margin-left: 5px; fill: #f3efe4; }
+.stage.playing .big { opacity: 0; }
+.bar { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
+.bar button { flex: none; width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--line); background: transparent; color: var(--ink); cursor: pointer; display: grid; place-items: center; }
+.bar button:hover { border-color: var(--muted); }
+.bar button svg { width: 16px; height: 16px; fill: currentColor; }
+.track { position: relative; flex: 1; height: 40px; cursor: pointer; touch-action: none; }
+.track .rail { position: absolute; left: 0; right: 0; top: 19px; height: 2px; background: var(--line); }
+.track .fill { position: absolute; left: 0; top: 19px; height: 2px; background: var(--accent); width: 0; }
+.track .knob { position: absolute; top: 13px; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%; background: var(--paper); left: 0; }
+.track .tick { position: absolute; top: 15px; width: 1px; height: 10px; background: #5a554c; }
+.track .chap { position: absolute; top: -2px; font-size: 12px; color: var(--muted); transform: translateX(-2px); white-space: nowrap; }
+.time { flex: none; font-variant-numeric: tabular-nums; color: var(--muted); font-size: 13px; min-width: 88px; text-align: right; }
+.notes { margin-top: 26px; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 18px 32px; color: var(--muted); font-size: 13.5px; }
+.notes h2 { font: 400 15px "NBNote", sans-serif; color: var(--ink); margin: 0 0 6px; }
+.notes p, .notes ul { margin: 0; }
+.notes ul { padding-left: 1.1em; }
+.notes a { color: inherit; }
+kbd { font: 12px ui-monospace, monospace; border: 1px solid var(--line); border-radius: 3px; padding: 0 4px; }
+body.render { background: #000; }
+body.render main { max-width: none; padding: 0; margin: 0; }
+body.render header, body.render .bar, body.render .notes, body.render .big, body.render .loading { display: none; }
+body.render .stage { width: 1920px; height: 1080px; aspect-ratio: auto; border-radius: 0; box-shadow: none; }
+@media (max-width: 600px) {
+  h1 { font-size: 24px; }
+  .bar { gap: 8px; }
+  .time { min-width: 0; font-size: 12px; }
+  .track .chap { display: none; }
+}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>看不见的<b>故障</b></h1>
+    <p>横线本上的铅笔动画 · 约 3 分钟</p>
+  </header>
+  <div class="stage" id="stage" aria-label="动画画面，点击播放或暂停">
+    <canvas id="cv" width="1920" height="1080"></canvas>
+    <div class="loading" id="loading">正在铺开纸张…</div>
+    <div class="big"><svg viewBox="0 0 24 24"><path d="M5 3l15 9-15 9z"/></svg></div>
+  </div>
+  <div class="bar">
+    <button id="play" aria-label="播放 / 暂停"><svg viewBox="0 0 24 24"><path id="playIcon" d="M6 4l14 8-14 8z"/></svg></button>
+    <div class="track" id="track" role="slider" aria-label="进度" tabindex="0">
+      <div class="rail"></div><div class="fill" id="fill"></div><div class="knob" id="knob"></div>
+    </div>
+    <div class="time" id="time">0:00 / 0:00</div>
+  </div>
+  <section class="notes">
+    <div>
+      <h2>关于这部片子</h2>
+      <p>据公开报道与各方陈述改编。人物为示意，非真实肖像；对白为情境化改写。被指称的当事人在片中只以一个淡淡的虚线轮廓和一把空椅子出现。访谈说法不等同于生效裁判认定。</p>
+    </div>
+    <div>
+      <h2>来源</h2>
+      <ul>
+        <li>keyu-tian-sabotage.github.io（参与者陈述）</li>
+        <li>字节跳动公开回应（据 BBC 报道）</li>
+        <li>NeurIPS 2024 官方公告</li>
+        <li>elsewhere 访谈（2026.10）</li>
+      </ul>
+    </div>
+    <div>
+      <h2>怎么看</h2>
+      <p><kbd>空格</kbd> 播放 / 暂停，<kbd>←</kbd><kbd>→</kbd> 前后 5 秒，拖动进度条跳转。每一帧都是实时用程序"手绘"的：线条每秒抖动 8 次，阴影全部是排线。</p>
+    </div>
+  </section>
+</main>
+<script src="src/engine.js"></script>
+<script src="src/renderer.js"></script>
+<script src="src/props.js"></script>
+<script src="src/characters.js"></script>
+<script src="src/act1.js"></script>
+<script src="src/act2.js"></script>
+<script src="src/act3.js"></script>
+<script src="src/player.js"></script>
+</body>
+</html>
